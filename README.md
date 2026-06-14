@@ -1,1 +1,1 @@
-personal stock alert terminal
+just a terminal :)
