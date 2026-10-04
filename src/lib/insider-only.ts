@@ -15,10 +15,12 @@ export function recoverPortfolioEntryCandidates(positions: readonly {
     score: p.entryScore, signalId: p.signalId, source: 'signal' as const }));
 }
 
-/** Equal target tickets at ENTRY; gains may subsequently drift above 20%. */
+/** Target 20% at entry, allowing the remaining cash to fund the final slot.
+ * A hard 20% minimum rejects the fifth trade after fees or earlier gains.
+ */
 export function insiderOnlyConfig(base: PortfolioConfig): PortfolioConfig {
   return { ...base, startingCash: 10_000, cashPolicy: 'idle',
-    baseWeight: 0.2, maxWeight: 0.2, minWeight: 0.2, maxPositions: 5 };
+    baseWeight: 0.2, maxWeight: 0.2, minWeight: 0, maxPositions: 5 };
 }
 
 export function buildInsiderOnly(input: PortfolioSimInput, builtAt: string): PortfolioExperiment {

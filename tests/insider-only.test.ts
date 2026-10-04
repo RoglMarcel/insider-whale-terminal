@@ -13,6 +13,20 @@ const fixture = (): PortfolioSimInput => ({
 const build = (input = fixture()) => buildInsiderOnly(input, '2026-09-23T12:00:00Z');
 
 describe('independent insider-only portfolio', () => {
+  it('uses remaining cash for the fifth slot instead of delaying its entry after earlier gains', () => {
+    const input = fixture();
+    input.candidates = ['AAA', 'BBB', 'CCC', 'DDD'].map(t => candidate(t));
+    input.prices = Object.fromEntries(input.candidates.map(c => [c.ticker, series([100, 110, 110])]));
+    input.prices.GME = series([20, 21.16, 25.03]);
+    input.candidates.push({ ...candidate('GME'), earliestDate: days[1] });
+    const result = build(input).state;
+    const gme = result.open.find(p => p.ticker === 'GME')!;
+    expect(result.open).toHaveLength(5);
+    expect(gme.entryDate).toBe(days[1]);
+    expect(gme.entryPrice).toBe(21.16);
+    expect(gme.costBasis).toBeCloseTo(2000);
+    expect(result.equity.every(p => p.cash >= -1e-7)).toBe(true);
+  });
   it('recovers an expired early entry and recalculates shares and returns from the shared price book', () => {
     const input = fixture();
     input.prices = { GME: series([21.16, 25.03, 24.38]) };

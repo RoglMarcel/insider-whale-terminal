@@ -66,7 +66,7 @@ const en = {
   'pf.compare.drawdown': 'Maximum drawdown',
   'pf.compare.sameStart': 'Same dates and starting capital; simulated fills include slippage.',
   'pf.compare.details': 'Portfolio details',
-  'pf.compare.rules': 'Insider-only: $10,000 start, equal 20% entry targets, up to 5 stocks. Unused capital stays in cash. No automatic rebalancing or follow-up buys; weights may drift after entry. Same entry threshold and exit rules as portfolio 2.',
+  'pf.compare.rules': 'Insider-only: $10,000 start, 20% entry targets, up to 5 stocks. Remaining cash may fund a smaller entry (minimum $100). Unused capital stays in cash. No automatic rebalancing or follow-up buys; weights may drift after entry. Same entry threshold and exit rules as portfolio 2.',
 
   'updates.affected': 'Affected tickers: {n}',
   'updates.priceAsOf': 'Portfolio prices through',
@@ -698,7 +698,7 @@ const de: Record<TKey, string> = {
   'pf.compare.drawdown': 'Maximaler Rückgang',
   'pf.compare.sameStart': 'Gleicher Zeitraum und gleiches Startkapital; simulierte Käufe enthalten Slippage.',
   'pf.compare.details': 'Portfoliodetails',
-  'pf.compare.rules': 'Nur Insider-Signale: 10.000 $ Startkapital, gleiche Kaufziele von 20 %, maximal 5 Aktien. Ungenutztes Kapital bleibt bar. Keine automatische Umschichtung oder Nachkäufe; Gewichte können nach Einstieg abweichen. Gleiche Einstiegsschwelle und Ausstiegsregeln wie Portfolio 2.',
+  'pf.compare.rules': 'Nur Insider-Signale: 10.000 $ Startkapital, Kaufziele von 20 %, maximal 5 Aktien. Die freie Restkasse darf einen kleineren Einstieg finanzieren (mindestens 100 $). Ungenutztes Kapital bleibt bar. Keine automatische Umschichtung oder Nachkäufe; Gewichte können nach Einstieg abweichen. Gleiche Einstiegsschwelle und Ausstiegsregeln wie Portfolio 2.',
 
   'updates.affected': 'Betroffene Ticker: {n}',
   'updates.priceAsOf': 'Depotkurse bis',
