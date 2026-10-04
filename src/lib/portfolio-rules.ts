@@ -1,9 +1,9 @@
+import { usSessionCloseUtc } from './marketSession';
 import {
   DEFAULT_PORTFOLIO_CONFIG,
   PORTFOLIO_MIN_DAYS_CAGR,
   PORTFOLIO_MIN_DAYS_SHARPE,
   PORTFOLIO_PRICE_SEARCH_DAYS,
-  PORTFOLIO_SESSION_CLOSE_UTC_HOUR,
   PORTFOLIO_SIGMA_LOOKBACK_DAYS,
   PORTFOLIO_TRADING_DAYS_PER_CALENDAR_DAY,
   PORTFOLIO_WINDOWS,
@@ -52,23 +52,17 @@ export function diffDaysYmd(from: string, to: string): number {
   return Math.round((ymdToUtcMs(to) - ymdToUtcMs(from)) / 86_400_000);
 }
 
-/**
- * Earliest calendar date whose CLOSING auction was still ahead of `seenAt`.
- *
- * This is the entire no-look-ahead guarantee in one function. A signal first
- * seen at 23:07 UTC could not have been bought at that day's close, which had
- * already happened — it prices at the NEXT session. The hour is read out of the
- * string rather than through `Date.parse`, because SQLite also writes
- * `YYYY-MM-DD HH:MM:SS` (UTC, no zone marker) and Node would parse that as
- * LOCAL time, silently shifting the cutoff by the machine's offset.
- */
-export function earliestEntryDate(
-  seenAt: string,
-  closeUtcHour: number = PORTFOLIO_SESSION_CLOSE_UTC_HOUR,
-): string {
-  const m = /^(\d{4}-\d{2}-\d{2})[T ](\d{2})/.exec(String(seenAt).trim());
-  if (!m) return String(seenAt).slice(0, 10);
-  return Number(m[2]) >= closeUtcHour ? addDaysYmd(m[1], 1) : m[1];
+/** Earliest eligible closing auction; optional UTC override preserves explicit legacy callers. */
+export function earliestEntryDate(seenAt:string,closeUtcHour?:number):string {
+  const text=String(seenAt).trim();
+  const date=/^(\d{4}-\d{2}-\d{2})/.exec(text)?.[1];
+  if(!date)return '9999-12-31';
+  if(text.length===10)return date;
+  const timestamp=Date.parse(text.includes('T')?(/(?:Z|[+-]\d{2}:?\d{2})$/.test(text)?text:text+'Z'):text.replace(' ','T')+'Z');
+  if(!Number.isFinite(timestamp))return '9999-12-31';
+  const utcDate=new Date(timestamp).toISOString().slice(0,10);
+  const close=closeUtcHour==null?usSessionCloseUtc(utcDate):Date.parse(utcDate+'T00:00:00Z')+closeUtcHour*3600000;
+  return timestamp>=close?addDaysYmd(utcDate,1):utcDate;
 }
 
 // ── Trading mechanics ──

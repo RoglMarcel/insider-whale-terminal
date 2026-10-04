@@ -6,6 +6,7 @@ import path from 'node:path';
 import fs from 'node:fs';
 import { execFile } from 'node:child_process';
 import { autoUpdater } from 'electron-updater';
+import { reduceSoftwareUpdate, type SoftwareUpdateState, type SoftwareUpdateEvent } from '../src/types/softwareUpdate';
 import type {
   AppSettings,
   ScrapeResult,
@@ -433,8 +434,21 @@ async function exportSignalsCsv(): Promise<{ ok: boolean; path?: string; cancele
   }
 }
 
-let updateStatus: 'idle' | 'available' | 'downloaded' = 'idle';
-let updateVersion = '';
+let softwareUpdate:SoftwareUpdateState={status:'idle',version:''};
+const updateEvent=(event:SoftwareUpdateEvent)=>{softwareUpdate=reduceSoftwareUpdate(softwareUpdate,event);};
+let checkingUpdate:Promise<SoftwareUpdateState>|undefined;
+async function checkSoftwareUpdates():Promise<SoftwareUpdateState>{
+  if(checkingUpdate)return checkingUpdate;
+  if(softwareUpdate.status==='downloaded')return softwareUpdate;
+  updateEvent({type:'checking'});
+  const task=(async()=>{
+    try{await autoUpdater.checkForUpdatesAndNotify();}
+    catch(error){const message=error instanceof Error?error.message:String(error);updateEvent({type:'error',message});broadcast(IPC.updateError,message);}
+    return softwareUpdate;
+  })();
+  checkingUpdate=task;
+  try{return await task;}finally{checkingUpdate=undefined;}
+}
 
 function initAutoUpdater(): void {
   if (!app.isPackaged) return;
@@ -454,39 +468,35 @@ function initAutoUpdater(): void {
   };
   autoUpdater.logger = customLogger;
 
-  // Code-signature verification is intentionally left ENABLED (electron-updater's
-  // default). A previous build overrode `verifyUpdateCodeSignature` to always pass,
-  // which meant any tampered installer served to the updater would be installed and
-  // run as a silent auto-update — a remote-code-execution vector.
-  // NOTE: release builds must therefore be code-signed (electron-builder
-  // `win.signtoolOptions` / certificate config). Until they are, Windows signature
-  // verification will correctly REJECT the update instead of installing unverified
-  // code — which is the safe failure mode.
+  // Keep electron-updater's default verification. SHA-512 is checked against the
+  // release manifest. Authenticode verification runs when a publisherName is
+  // configured by a signed build; unsigned builds do not provide publisher identity.
 
   autoUpdater.on('checking-for-update', () => {
     customLogger.info('Checking for update...');
+    updateEvent({type:'checking'});
   });
 
   autoUpdater.on('update-available', (info) => {
     customLogger.info(`Update available: ${info.version}`);
-    updateStatus = 'available';
-    updateVersion = info.version;
+    updateEvent({type:'available',version:info.version});
     broadcast(IPC.updateAvailable, info.version);
   });
 
   autoUpdater.on('update-not-available', () => {
     customLogger.info('Update not available.');
+    updateEvent({type:'current'});
   });
 
   autoUpdater.on('error', (err) => {
     customLogger.error(`Error checking for update: ${err.message || String(err)}`);
+    updateEvent({type:'error',message:err.message || String(err)});
     broadcast(IPC.updateError, err.message || String(err));
   });
 
   autoUpdater.on('update-downloaded', (info) => {
     customLogger.info(`Update downloaded: ${info.version}`);
-    updateStatus = 'downloaded';
-    updateVersion = info.version;
+    updateEvent({type:'downloaded',version:info.version});
     broadcast(IPC.updateDownloaded, info.version);
 
     // Native OS Notification
@@ -509,9 +519,10 @@ function initAutoUpdater(): void {
     }
   });
 
-  autoUpdater.checkForUpdatesAndNotify();
+  autoUpdater.on('download-progress',info=>updateEvent({type:'progress',percent:info.percent}));
+  void checkSoftwareUpdates();
   setInterval(() => {
-    autoUpdater.checkForUpdatesAndNotify();
+    void checkSoftwareUpdates();
   }, 4 * 60 * 60 * 1000);
 }
 
@@ -657,10 +668,12 @@ function registerIpc(): void {
   handle(IPC.appSetAutoStart, (_e, enabled: boolean) => setAutoStart(enabled));
   handle(IPC.appGetAutoStart, () => getAutoStart());
   handle(IPC.updateQuitAndInstall, () => {
+    if(softwareUpdate.status!=='downloaded')throw new Error('No downloaded software update is ready.');
     console.log('[updater] Quitting and installing update...');
     autoUpdater.quitAndInstall();
   });
-  handle(IPC.updateGetStatus, () => ({ status: updateStatus, version: updateVersion }));
+  handle(IPC.updateGetStatus, () => softwareUpdate);
+  handle(IPC.updateCheck, () => checkSoftwareUpdates());
 
   handle(IPC.dbClear, () => {
     clearDatabase();
@@ -741,7 +754,7 @@ if (!singleInstance) {
       mainWindow.focus();
     }
     if (app.isPackaged) {
-      autoUpdater.checkForUpdatesAndNotify().catch(() => undefined);
+      void checkSoftwareUpdates();
     }
   });
 

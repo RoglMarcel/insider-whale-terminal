@@ -6,9 +6,11 @@ import { calculateFairValue } from '../electron/fairValue';
 import { parseStockDirectory, type CatalogueStock } from '../electron/analysisCatalogue';
 import type { StockAnalysis } from '../src/types/analysis';
 import { upgradeFairValue } from '../src/lib/fairValueDisplay';
+import { peerInputs } from '../src/lib/valuationPeers';
 import { compareExternalFairValues } from '../electron/scraper/externalFairValue';
 
 interface Cache { stocks: CatalogueStock[]; results: Record<string, StockAnalysis> }
+process.env.ANALYSIS_CATALOGUE_BUILD='1'; // use this runner's universe, not a prior deployed catalogue
 const root = path.resolve('public/data');
 const cacheFile = path.resolve('data/analysis-cache.json.gz');
 function saveCache(bytes: Buffer) {
@@ -35,7 +37,7 @@ async function main() {
   // Recalculate with the new methodology while preserving original source dates.
   for (const result of Object.values(cache.results)) {
     const old = upgradeFairValue(result.valuation);
-    const recalculated = calculateFairValue(old.inputs, Date.parse(old.calculatedAt), old.warnings.filter(w=>!w.startsWith('Model corridor is')));
+    const recalculated = calculateFairValue(old.inputs, Date.parse(old.calculatedAt), old.warnings.filter(w=>!w.startsWith('Model corridor is')), old.currency);
     result.valuation = {...recalculated,currency:old.currency,quote:old.quote};
     result.valuation.externalComparisons = compareExternalFairValues(result.valuation, old.externalComparisons || []);
   }
@@ -121,37 +123,23 @@ async function main() {
     }
   }));
   checkpoint();
-  // Same-industry medians from this observed universe; require >=5 OTHER companies.
-  const groups = new Map<string, CatalogueStock[]>();
-  for (const stock of cache.stocks) if (stock.industry) groups.set(stock.industry, [...(groups.get(stock.industry) ?? []), stock]);
+  // Shared peer enrichment also used by standalone Desktop and alert collection.
+  const universe = JSON.parse(JSON.stringify(cache.results)) as Cache['results'];
   for (const stock of cache.stocks) {
-    const result = cache.results[stock.ticker];
-    if (!result || result.valuation.version !== 3 || Date.now() - Date.parse(result.valuation.calculatedAt) > 86_400_000) continue;
-    const peers = (groups.get(stock.industry || '') || []).filter(p => p.ticker !== stock.ticker).flatMap(p => {
-      const r = cache.results[p.ticker]?.valuation;
-      return r && Date.now() - Date.parse(r.calculatedAt) < 86_400_000 ? [r] : [];
-    });
-    const peerInputs: typeof result.valuation.inputs = {};
-    for (const [field, target, max] of [['pe','peerPE',100],['forwardPE','peerForwardPE',100],['ps','peerPS',50],['pb','peerPB',50],['pcf','peerPCF',100],['ptbv','peerPTBV',100],['peg','peerPEG',5],['evEbit','peerEVEBIT',100],['evEbitda','peerEVEBITDA',100],['evSales','peerEVSales',50],['dividendYield','peerDividendYield',.15]] as const) {
-      const values=peers.map(r=>r.inputs[field]?.value).filter((n):n is number=>n!=null && n>0 && n<max).sort((a,b)=>a-b);
-      if(values.length>=5)peerInputs[target]={value:(values[Math.floor((values.length-1)/2)]+values[Math.floor(values.length/2)])/2,source:'https://stockanalysis.com/stocks/',fetchedAt:result.valuation.calculatedAt};
-    }
-    if (Object.keys(peerInputs).length || /\b(banks?|insurance|credit services)\b/i.test(stock.industry || '')) {
-      const old = result.valuation;
-      const inputs = { ...old.inputs, ...peerInputs };
-      if (/\b(banks?|insurance|credit services)\b/i.test(stock.industry || '')) inputs.financialCompany = { value: 1, source: 'https://stockanalysis.com/stocks/', fetchedAt: old.calculatedAt };
-      const priorWarnings = old.warnings.filter(w => !w.startsWith('Peer benchmarks:') && !w.startsWith('Model corridor is'));
-      const recalculated = calculateFairValue(inputs, Date.parse(old.calculatedAt), [...priorWarnings, `Peer benchmarks: same-industry (${stock.industry}) same-day medians; at least 5 other positive observations per ratio, extreme ratios excluded. Source universe: ${peers.map(p=>p.quote?.name || 'unnamed').slice(0,20).join(', ')}.`]);
-      result.valuation = { ...recalculated, currency: old.currency, quote: old.quote };
-      result.valuation.externalComparisons = compareExternalFairValues(result.valuation, old.externalComparisons || []);
-    }
+    const result=cache.results[stock.ticker]; if(!result)continue;
+    const old=result.valuation, at=Date.parse(old.calculatedAt);
+    const inputs=Object.fromEntries(Object.entries(old.inputs).filter(([k])=>!k.startsWith('peer')));
+    const peers=peerInputs(stock.ticker,stock.industry,cache.stocks,universe,at,old.currency);
+    const next=calculateFairValue({...inputs,...peers},at,old.warnings.filter(w=>!w.startsWith('Model corridor is')),old.currency);
+    result.valuation=upgradeFairValue({...next,quote:old.quote});
+    result.valuation.externalComparisons=compareExternalFairValues(result.valuation,old.externalComparisons||[]);
   }
   for (const [ticker, result] of Object.entries(cache.results)) {
     if (result.valuation.version === 3 && /^[A-Z0-9][A-Z0-9.-]{0,19}$/.test(ticker)) fs.writeFileSync(path.join(root, 'analysis', `${ticker}.json`), JSON.stringify(result));
   }
   const generatedAt = new Date().toISOString();
   fs.writeFileSync(path.join(root, 'analysis-index.json'), JSON.stringify({ generatedAt, stocks: cache.stocks.map(s => ({ ...s, available: cache.results[s.ticker]?.valuation.version === 3, asOf: cache.results[s.ticker]?.valuation.calculatedAt })) }));
-  fs.writeFileSync(path.join(root,'analysis-summary.json'), JSON.stringify({generatedAt,stocks:Object.fromEntries(Object.entries(cache.results).map(([ticker,result])=>[ticker,{...result.valuation,inputs:{},models:[],warnings:[],assumptions:[]}]))}));
+  fs.writeFileSync(path.join(root,'analysis-summary.json'), JSON.stringify({generatedAt,stocks:Object.fromEntries(Object.entries(cache.results).map(([ticker,result])=>[ticker,{...result.valuation,inputs:{},models:[]}]))}));
   const compressed = gzipSync(JSON.stringify(cache));
   saveCache(compressed);
   fs.writeFileSync(path.join(root, 'analysis-cache.json.gz'), compressed);

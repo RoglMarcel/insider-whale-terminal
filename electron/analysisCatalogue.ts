@@ -20,8 +20,7 @@ export function parseStockDirectory(html: string, suffix = '', exchange = 'US'):
       const industryMatch = new RegExp(`industry:(${str})`).exec(match[3]);
       const industry = industryMatch ? JSON.parse(industryMatch[1]) : undefined;
       if (industry === 'Shell Companies' || /\b(warrants?|preferred|rights|units)\b/i.test(name)) continue;
-      // USD threshold only; don't compare different currencies' market caps.
-      if (!suffix && Number.isFinite(marketCap) && marketCap < 300_000_000) continue;
+      // A regular listing remains searchable even when small or not yet valued.
       seen.add(ticker);
       out.push({ ticker, name, exchange, industry, marketCap: Number.isFinite(marketCap) ? marketCap : undefined });
     } catch { /* malformed primitive */ }

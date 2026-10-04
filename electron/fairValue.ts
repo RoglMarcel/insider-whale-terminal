@@ -1,4 +1,5 @@
 import type { FairValueResult, FundamentalDatum } from '../src/types/fairValue';
+import { validateFundamentals } from '../src/lib/fundamentalValidation';
 
 export const VALUATION_MODELS = [
   'DCF-FCFF', 'DCF-FCFE', 'DDM/Gordon Growth', '2-stage DDM', 'APV', 'Residual income', 'EVA',
@@ -9,7 +10,7 @@ export const VALUATION_MODELS = [
 
 /** Five explicit annual periods plus Gordon terminal value; rates are decimals. */
 export function discountedCashFlow(cash: number, growth: number, discount: number, terminal: number): number {
-  if (![cash, growth, discount, terminal].every(Number.isFinite) || cash <= 0 || discount <= terminal || discount <= 0 || growth <= -1) return NaN;
+  if (![cash, growth, discount, terminal].every(Number.isFinite) || cash <= 0 || discount <= terminal || discount <= 0 || growth <= -1 || terminal <= -1) return NaN;
   let pv = 0;
   for (let year = 1; year <= 5; year++) pv += cash * (1 + growth) ** year / (1 + discount) ** year;
   return pv + cash * (1 + growth) ** 5 * (1 + terminal) / (discount - terminal) / (1 + discount) ** 5;
@@ -17,7 +18,7 @@ export function discountedCashFlow(cash: number, growth: number, discount: numbe
 
 /** Three forecast years, then a seven-year linear fade to sustainable growth. */
 export function fadingCashFlow(cash: number, growth: number, discount: number, terminal: number): number {
-  if (![cash, growth, discount, terminal].every(Number.isFinite) || cash <= 0 || growth <= -1 || discount <= terminal || discount <= 0) return NaN;
+  if (![cash, growth, discount, terminal].every(Number.isFinite) || cash <= 0 || growth <= -1 || terminal <= -1 || discount <= terminal || discount <= 0) return NaN;
   let pv = 0;
   let flow = cash;
   for (let year = 1; year <= 10; year++) {
@@ -40,10 +41,9 @@ export function realOptionCall(asset: number, exercise: number, years: number, r
 }
 
 /** Only source-backed inputs enter the model. Defaults never count toward a higher level. */
-export function calculateFairValue(raw: Record<string, FundamentalDatum>, now = Date.now(), warnings: string[] = []): FairValueResult {
-  const inputs = Object.fromEntries(Object.entries(raw).filter(([, d]) =>
-    Number.isFinite(d.value) && !!d.source && Number.isFinite(Date.parse(d.fetchedAt)) &&
-    now - Date.parse(d.fetchedAt) >= 0 && now - Date.parse(d.fetchedAt) <= 86_400_000));
+export function calculateFairValue(raw: Record<string, FundamentalDatum>, now = Date.now(), warnings: string[] = [], currency = 'USD'): FairValueResult {
+  warnings = [...warnings];
+  const inputs = validateFundamentals(raw, now, currency, warnings);
   const v = (key: string) => inputs[key]?.value;
   const positive = (key: string) => (v(key) ?? 0) > 0;
   const price = positive('price') ? v('price')! : null;
@@ -62,7 +62,7 @@ export function calculateFairValue(raw: Record<string, FundamentalDatum>, now = 
   ];
   for (const [name, metric, multiple] of multiples) if (positive(metric) && positive(multiple)) put(name, v(metric)! * v(multiple)!);
   for (const [name, metric, multiple] of [['EV/EBIT', 'ebit', 'peerEVEBIT'], ['EV/EBITDA', 'ebitda', 'peerEVEBITDA'], ['EV/Sales', 'revenue', 'peerEVSales']]) {
-    if (positive(metric) && positive(multiple) && positive('shares') && v('cash') != null && v('debt') != null)
+    if (v('financialCompany') !== 1 && positive(metric) && positive(multiple) && positive('shares') && v('cash') != null && v('debt') != null)
       put(name, (v(metric)! * v(multiple)! + v('cash')! - v('debt')!) / v('shares')!);
   }
   if (positive('eps') && positive('epsGrowth') && positive('peerPEG')) put('PEG', v('eps')! * v('epsGrowth')! * 100 * v('peerPEG')!);
@@ -82,7 +82,7 @@ export function calculateFairValue(raw: Record<string, FundamentalDatum>, now = 
   const useCapm = v('usdRiskModel') === 1 && adjustedBeta != null;
   const costEquity = v('costEquity') ?? (useCapm ? Math.max(0.07, 0.0425 + adjustedBeta! * 0.05) : 0.10);
   if (v('costEquity') == null && useCapm) assumptions.push(`USD CAPM scenario: 4.25% risk-free rate + adjusted beta (${adjustedBeta!.toFixed(3)} = 0.67 × observed beta + 0.33) × 5% equity premium, with a 7% floor. Rate and premium are explicit policy assumptions, not live market observations; this does not qualify as sourced cost of equity.`);
-  const cashflow = v('financialCompany') === 1 ? undefined : v('normalizedFcfePerShare') ?? v('fcfePerShare');
+  const cashflow = v('financialCompany') === 1 ? undefined : v('fcfProxyPerShare') ?? v('normalizedFcfePerShare') ?? v('fcfePerShare');
   const scenarios: NonNullable<FairValueResult['scenarios']> = [];
   if (positive('dividend') || (cashflow ?? 0) > 0) {
     assumptions.push(`Per-share DCF: three years at ${(growth * 100).toFixed(1)}% growth (${growthProxy != null ? 'EPS forecast preferred as per-share cashflow proxy; revenue only when EPS forecast is missing; policy cap 25%; raw forecasts shown in inputs' : 'missing-forecast fallback'}), fading over seven years to 2.5%; cost of equity ${(costEquity * 100).toFixed(1)}%${v('costEquity') == null ? ' (assumption; sensitivity shown)' : ''}. EPS can reflect buybacks and accounting effects; it is not direct FCF guidance.`);
@@ -93,7 +93,7 @@ export function calculateFairValue(raw: Record<string, FundamentalDatum>, now = 
   }
   if ((cashflow ?? 0) > 0) {
     put('DCF-FCFE', fadingCashFlow(cashflow!, growth, costEquity, terminal));
-    if (positive('normalizedFcfePerShare')) assumptions.push('Equity cashflow proxy: FCF per share with neutral future net borrowing. Current debt issuance/repayment is not projected forever; cash is not added again.');
+    if (positive('fcfProxyPerShare') || positive('normalizedFcfePerShare')) assumptions.push('Equity cashflow proxy: a single trailing FCF per share, not a historically normalized series, with neutral future net borrowing. Current debt issuance/repayment is not projected forever; cash is not added again.');
     for (const [name, g, r, t] of [
       ['bear', Math.max(-0.3, growth - 0.05), costEquity + 0.02, 0.02],
       ['base', growth, costEquity, terminal],
@@ -106,6 +106,10 @@ export function calculateFairValue(raw: Record<string, FundamentalDatum>, now = 
   if (v('financialCompany') !== 1 && positive('fcff') && positive('shares') && positive('wacc') && v('cash') != null && v('debt') != null) {
     put('DCF-FCFF', (fadingCashFlow(v('fcff')!, enterpriseGrowth, v('wacc')!, terminal) + v('cash')! - v('debt')!) / v('shares')!);
     assumptions.push(`FCFF uses the same ten-year fade, with WACC and an explicit cash/debt bridge.`);
+    if(!scenarios.length)for(const [name,g,r,t] of [['bear',Math.max(-.3,enterpriseGrowth-.05),v('wacc')!+.02,.02],['base',enterpriseGrowth,v('wacc')!,.025],['bull',Math.min(.6,enterpriseGrowth+.05),Math.max(.065,v('wacc')!-.015),.03]] as const){
+      const value=(fadingCashFlow(v('fcff')!,g,r,t)+v('cash')!-v('debt')!)/v('shares')!;
+      if(Number.isFinite(value)&&value>0)scenarios.push({name,value,growth:g,discount:r,terminal:t});
+    }
   }
   // These require independently supplied asset/segment valuations, not balance-sheet proxies.
   for (const [name, key] of [['NAV', 'navEquity'], ['Liquidation value', 'liquidationEquity'], ['Replacement value', 'replacementEquity'], ['SOTP', 'sotpEquity']]) {
@@ -127,21 +131,58 @@ export function calculateFairValue(raw: Record<string, FundamentalDatum>, now = 
     put('Black-Scholes real options', (v('baseEquityWithoutOption')! + realOptionCall(v('optionAssetPV')!, v('optionExerciseCost')!, v('optionYears')!, v('optionRiskFreeRate')!, v('optionVolatility')!)) / v('shares')!);
   }
 
-  const relativeCount = models.filter(m => m.value != null && multiples.some(([n]) => n === m.name)).length;
+  const relativeNames = [...multiples.map(([name])=>name), 'EV/EBIT', 'EV/EBITDA', 'EV/Sales', 'PEG', 'Dividend yield'];
+  const relativeCount = models.filter(m => m.value != null && relativeNames.includes(m.name)).length;
   const absolute = models.some(m => m.value != null && /^DCF/.test(m.name));
-  // A default discount rate is not evidence for level 3, and model count is not accuracy.
-  const sourcedDiscount = models.some(m => m.value != null && (m.name === 'DCF-FCFF' && positive('wacc') || m.name === 'DCF-FCFE' && positive('costEquity')));
-  const level: FairValueResult['level'] = absolute && sourcedDiscount && Object.keys(inputs).length >= 10 ? 3 : (absolute && forecasts.length > 0 && Object.keys(inputs).length >= 5) || relativeCount >= 2 && Object.keys(inputs).length >= 5 ? 2 : 1;
-  let values = models.flatMap(m => m.value == null ? [] : [m.value]);
-  // Combine independent method families once; two DDM variants are not two votes.
-  if (absolute) {
-    const groupMedian = (names: string[]) => {
-      const group = models.filter(m => names.includes(m.name) && m.value != null).map(m => m.value!).sort((a,b)=>a-b);
-      return group.length ? (group[Math.floor((group.length-1)/2)] + group[Math.floor(group.length/2)]) / 2 : null;
-    };
-    values = [groupMedian(['DCF-FCFE','DCF-FCFF']), groupMedian(['Historical P/E','Peer P/E','Forward P/E','Shiller P/E'])].filter((n): n is number => n != null);
-    assumptions.push('Central value uses cashflow and, when available, independently sourced earnings benchmarks. DDM is a cross-check rather than an extra vote when equity cashflow already values the same distributions.');
+  const evidenced = (key: string) => {
+    const d = inputs[key];
+    return !!d && (d.origin === 'reported' || d.origin === 'estimate') && !!d.asOf && d.period !== 'unknown' && !!d.period && now-Date.parse(d.asOf)<=550*86400000;
+  };
+  const forecast = ['epsGrowth','revenueGrowth'].some(k=>v(k)!=null && inputs[k].origin!=='assumption' && inputs[k].origin!=='fallback');
+  const fcffReady = models[0].value != null && ['fcff','wacc','shares','cash','debt','revenueGrowth'].every(evidenced);
+  const fcfeReady = models[1].value != null && ['fcfePerShare','costEquity','epsGrowth'].every(evidenced) && !positive('fcfProxyPerShare') && !positive('normalizedFcfePerShare');
+  const level: FairValueResult['level'] = absolute && (fcffReady || fcfeReady) ? 3 : relativeCount >= 2 || absolute && forecast ? 2 : 1;
+  const qualityReasons = [level===3 ? 'Consistent dated cashflow, discount and growth evidence supports fundamental valuation.' : level===2 ? 'Suitable relative comparisons or forecast-backed cashflow with limited evidence.' : 'Simple valuation or material policy fallback; evidence does not support a higher level.'];
+  const missingQualityInputs = level===3 ? [] : [...new Set([
+    ...(!forecast ? ['Sourced growth forecast'] : []),
+    ...(!fcffReady && !fcfeReady ? ['Dated consistent cashflow and independently supported discount rate; current FCF proxy is not normalized history'] : []),
+    ...(relativeCount < 2 ? ['At least two suitable independent relative comparisons'] : []),
+  ])];
+  const requirements: Record<string,string[]> = {
+    ...Object.fromEntries(multiples.map(([n,m,k])=>[n,[m,k]])),
+    'DCF-FCFF':['fcff','wacc','shares','cash','debt'], 'DCF-FCFE':['fcfePerShare'],
+    'EV/EBIT':['ebit','peerEVEBIT','shares','cash','debt'], 'EV/EBITDA':['ebitda','peerEVEBITDA','shares','cash','debt'], 'EV/Sales':['revenue','peerEVSales','shares','cash','debt'],
+    'PEG':['eps','epsGrowth','peerPEG'], 'Dividend yield':['dividend','peerDividendYield'],
+    'DDM/Gordon Growth':['dividend'], '2-stage DDM':['dividend'],
+    'APV':['unleveredCashFlow','costOfAssets','shares','taxShieldPV','distressPV','cash','debt'],
+    'Residual income':['bookPerShare','residualIncomePVPerShare'], 'EVA':['investedCapital','shares','economicProfitPV','cash','debt'],
+    'NAV':['navEquity','shares'], 'Liquidation value':['liquidationEquity','shares'], 'Replacement value':['replacementEquity','shares'], 'SOTP':['sotpEquity','shares'],
+    'Stuttgart method':['stuttgartAdjustedAssets','stuttgartWeightedEarnings','shares','stuttgartApplicable'],
+    'Black-Scholes real options':['optionAssetPV','optionExerciseCost','optionYears','optionRiskFreeRate','optionVolatility','baseEquityWithoutOption','shares'],
+  };
+  for (const model of models) {
+    model.missingInputs = model.value!=null ? [] : (requirements[model.name] || []).filter(k=>v(k)==null);
+    model.status = model.value!=null ? 'calculated' : 'missing-inputs';
+    if (model.value==null) model.reason = model.missingInputs.length ? 'Missing: '+model.missingInputs.join(', ') : 'Inputs do not satisfy positive value/rate requirements';
+    if (model.value==null && (v('financialCompany')===1 && /^(DCF|EV\/|APV|EVA)/.test(model.name) || /DDM/.test(model.name) && positive('eps') && (v('dividend')??0)/v('eps')!<.4)) {
+      model.status='unsuitable'; model.reason='Unsuitable sector cashflow/capital structure or distributions do not represent equity earnings';
+    }
   }
+  let values = models.flatMap(m => m.value == null ? [] : [m.value]);
+  // Each dependent method family receives at most one vote.
+  const families = absolute ? [
+    ['DCF-FCFE','DCF-FCFF'], ['Historical P/E','Peer P/E','Forward P/E','Shiller P/E','PEG'],
+  ] : [
+    ['DDM/Gordon Growth','2-stage DDM','Dividend yield'],
+    ['Historical P/E','Peer P/E','Forward P/E','Shiller P/E','PEG'],
+    ['EV/EBIT','EV/EBITDA','EV/Sales','P/S','P/CF'], ['P/B','P/TBV'],
+    ['APV','Residual income','EVA','NAV','Liquidation value','Replacement value','Stuttgart method','Black-Scholes real options','SOTP'],
+  ];
+  values = families.flatMap(names=>{
+    const g=models.filter(m=>names.includes(m.name)&&m.value!=null).map(m=>m.value!).sort((a,b)=>a-b);
+    return g.length ? [(g[Math.floor((g.length-1)/2)]+g[Math.floor(g.length/2)])/2] : [];
+  });
+  assumptions.push(absolute ? 'Central value uses cashflow and independent earnings benchmark families once each. Other methods are cross-checks.' : 'Central value is the median of available distribution, earnings, enterprise, book and specialized families; dependent variants share one vote.');
   let status: FairValueResult['status'] = values.length ? 'estimated' : 'fallback';
   if (!values.length && positive('eps')) {
     const g = growthProxy != null ? Math.max(0, Math.min(0.10, growthProxy)) : 0.02;
@@ -168,7 +209,7 @@ export function calculateFairValue(raw: Record<string, FundamentalDatum>, now = 
   const safetyMarginMet = price != null && entryPrice != null && price <= entryPrice;
   const recommendation = weight === 0 ? 'insufficient-data' : mispricingPct! < -5 ? 'undervalued' : mispricingPct! > 5 ? 'overvalued' : 'watch';
   const multiplier = 1 + weight * (safetyMarginMet && recommendation === 'undervalued' ? 0.15 : recommendation === 'overvalued' ? -0.1 : 0);
-  return { version: 3, calculatedAt: new Date(now).toISOString(), currency: 'USD', level, status, price, low, high, fairValue: median, scenarios,
+  return { version: 3, methodology: 4, qualityReasons, missingQualityInputs, calculatedAt: new Date(now).toISOString(), currency, level, status, price, low, high, fairValue: median, scenarios,
     upsidePct, mispricingPct, safetyMarginMet, marginOfSafety, entryPrice, weight, multiplier, recommendation, inputs, assumptions,
     warnings: [...warnings, 'Model corridor is scenario uncertainty, not a statistical confidence interval.', ...(status === 'unavailable' ? ['No positive earnings, book value or supported cashflows; no defensible numerical fallback.'] : [])], models };
 }

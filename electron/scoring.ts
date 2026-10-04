@@ -1,3 +1,4 @@
+import { upgradeFairValue } from '../src/lib/fairValueDisplay';
 import type {
   RawInsiderTrade,
   OptionsActivity,
@@ -743,6 +744,7 @@ export function normalizeAggregateTrades(agg: TickerAggregate): void {
  * always produce the same output.
  */
 export function scoreTicker(agg: TickerAggregate, config: ScoringConfig = DEFAULT_SCORING_CONFIG, asOf = Date.now()): ScoredTicker {
+  if (agg.fairValue) agg={...agg,fairValue:upgradeFairValue(agg.fairValue,asOf)};
   // Drop/repair impossible share×price×value combos so one glitched scrape
   // cannot mint $quadrillion volumes (e.g. FINS Insider-Monitor unit error).
   // Repaired COPIES — scoring must not mutate its input. Writing the sanitized

@@ -22,8 +22,8 @@ const MAX_SANE_SHARE_PRICE = 1_000_000;
 function DetailRow({ label, value, isMono = false }: { label: string; value: string; isMono?: boolean }) {
   return (
     <div className="flex min-w-0 items-center justify-between gap-2 text-[13px] leading-none lg:text-xs">
-      <span className="text-secondary shrink-0">{label}</span>
-      <span className={`truncate font-semibold text-right flex-1 min-w-0 ${isMono ? 'font-mono-terminal' : ''}`} title={value}>
+      <span className="text-secondary min-w-0 flex-1 break-words leading-snug">{label}</span>
+      <span className={`truncate font-semibold text-right shrink-0 max-w-[45%] ${isMono ? 'font-mono-terminal' : ''}`} title={value}>
         {value}
       </span>
     </div>

@@ -1,4 +1,5 @@
 import { normalizeAnalysisTicker, type StockAnalysis, type StockSuggestion } from '@/types/analysis';
+import { upgradeFairValue } from './fairValueDisplay';
 import { searchCatalogue } from '../../electron/analysisCatalogue';
 const base = `${import.meta.env.BASE_URL ?? '/'}data/`;
 let index: { at: number; stocks: StockSuggestion[] } | null = null;
@@ -24,7 +25,7 @@ export const catalogueAnalysis = {
     const response = await fetch(`${base}analysis/${encodeURIComponent(ticker)}.json`, { cache: 'no-cache', signal: AbortSignal.timeout(12000) });
     if (!response.ok) throw new Error('No published analysis yet for this listing');
     const result = await response.json();
-    if (result.ticker !== ticker || result.valuation?.version !== 3 || !Array.isArray(result.valuation.models)) throw new Error('Invalid published analysis');
-    return { ...result, origin: 'scheduled' };
+    if (result.ticker !== ticker || !result.valuation || !Array.isArray(result.valuation.models)) throw new Error('Invalid published analysis');
+    return { ...result, valuation: upgradeFairValue(result.valuation), origin: 'scheduled' };
   },
 };

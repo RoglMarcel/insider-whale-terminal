@@ -19,7 +19,7 @@ import { cleanText, isValidTicker, canonicalTicker } from './util';
 
 const ATOM_URL =
   'https://www.sec.gov/cgi-bin/browse-edgar?action=getcurrent&type=4&company=&dateb=&owner=only&count=100&output=atom';
-const SEC_UA = 'insider-whale-terminal/1.0 (marcel.rogls@gmail.com)';
+const SEC_UA = 'InsiderWhalePublicData/1.6.7';
 const FILING_LIMIT = 60;
 const CONCURRENCY = 4;
 const TOTAL_BUDGET_MS = 60_000;

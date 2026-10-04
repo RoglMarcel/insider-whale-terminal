@@ -4,6 +4,7 @@ on:
   workflow_dispatch: {}
   push:
     branches: [main, 'build/windows-*']
+    tags: ['v*']
     paths:
       - '.github/workflows/windows-desktop.yml'
       - 'electron/**'
@@ -18,7 +19,7 @@ on:
       - 'index.html'
 
 permissions:
-  contents: read
+  contents: write
 
 concurrency:
   group: windows-desktop-${{ github.ref }}
@@ -26,6 +27,7 @@ concurrency:
 
 jobs:
   package:
+    if: github.repository == 'RoglMarcel/insider-whale-terminal' && (startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/heads/build/windows-'))
     runs-on: windows-latest
     timeout-minutes: 30
     steps:
@@ -39,6 +41,8 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npm run typecheck
+      - name: Unit regression tests
+        run: npm test
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -46,6 +50,15 @@ jobs:
         run: |
           python -m pip install -r scripts/scrapling/build-requirements.txt
           python scripts/scrapling/build-runtime.py
+      - name: Bundle shared dated analysis snapshots
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force public/data | Out-Null
+          foreach ($file in @('analysis-cache.json.gz', 'analysis-index.json', 'analysis-summary.json')) {
+            Invoke-WebRequest "https://roglmarcel.github.io/insider-whale-web/data/$file" -OutFile "public/data/$file" -TimeoutSec 30
+          }
+          $index = Get-Content public/data/analysis-index.json -Raw | ConvertFrom-Json
+          if (!$index.stocks -or !$index.generatedAt) { throw 'Invalid shared analysis catalogue' }
       - name: Build Windows installer
         run: npm run dist:win -- --x64 --publish never
         env:
@@ -76,3 +89,14 @@ jobs:
           if-no-files-found: error
           compression-level: 0
           retention-days: 30
+
+      - name: Publish new regular desktop release
+        if: startsWith(github.ref, 'refs/tags/v')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          if ("v$version" -ne $env:GITHUB_REF_NAME) { throw 'Release tag/version mismatch' }
+          gh release create $env:GITHUB_REF_NAME "release/insider-whale-terminal-setup-$version.exe" "release/insider-whale-terminal-setup-$version.exe.blockmap" release/latest.yml --verify-tag --title "Insider & Whale Terminal $version" --notes-file "docs/releases/$version.md"
+          if ($LASTEXITCODE -ne 0) { throw 'Desktop release publication failed' }

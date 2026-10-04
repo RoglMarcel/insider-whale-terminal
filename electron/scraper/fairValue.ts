@@ -1,9 +1,13 @@
 import type { FundamentalDatum, FairValueResult } from '../../src/types/fairValue';
 import { calculateFairValue } from '../fairValue';
+import { publicHtml } from './publicHtml';
 import { scopedFetch, checkCancelled } from './cancellation';
 import { fetchMarketQuote, fundamentalsLocation } from '../marketData';
 import { fetchExternalFairValues, compareExternalFairValues } from './externalFairValue';
 import { useScrapling, scraplingHtml } from './scrapling';
+import { fundamentalUnit } from '../../src/lib/fundamentalValidation';
+import { enrichFromCatalogue } from '../valuationEnrichment';
+import { fetchSecAnnual } from './secFundamentals';
 
 const UA = 'Mozilla/5.0 (compatible; InsiderTracker/1.5)';
 const text = (s: string) => s.replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&nbsp;|&#160;/g, ' ').replace(/\s+/g, ' ').trim();
@@ -40,15 +44,15 @@ export function parseFundamentals(html: string, source: string, fetchedAt: strin
     const raw = rows.get(label) ?? (key === 'cash' ? rows.get('Cash & Cash Equivalents') : undefined);
     if (raw == null) continue;
     const n = parseFundamentalNumber(key === 'dividend' ? raw.replace(/\s*\([^)]*\)\s*$/, '') : raw);
-    if (n != null) out[key] = { value: /Growth|wacc|taxRate|roe|roic|payoutRatio|dividendYield/.test(key) ? n / 100 : n, source, fetchedAt };
+    if (n != null) out[key] = { value: /Growth|wacc|taxRate|roe|roic|payoutRatio|dividendYield/.test(key) ? n / 100 : n, source, fetchedAt, asOf: null, period: /Growth/.test(key) ? 'forecast' : /^(eps|revenue|ebit|ebitda|fcf|operatingCash|dividend)$/.test(key) ? 'TTM' : 'unknown', origin: /Growth|analystTarget|forward|wacc/.test(key) ? 'estimate' : 'reported', unit: fundamentalUnit(key), originalValue: raw };
   }
-  const derive = (key: string, value: number) => { if (Number.isFinite(value)) out[key] = { value, source, fetchedAt }; };
+  const derive = (key: string, value: number, formula: string, dependencies: string[]) => { if (Number.isFinite(value)) out[key] = { value, source, fetchedAt, asOf: null, period: 'TTM', origin: 'derived', unit: fundamentalUnit(key), derivation: formula, dependencies }; };
   // Market cap and shares are rounded: their quotient is NOT a quote.
   if (out.shares?.value > 0) {
-    if (out.fcf && out.netBorrowing) derive('fcfePerShare', (out.fcf.value + out.netBorrowing.value) / out.shares.value);
-    if (out.fcf) derive('normalizedFcfePerShare', out.fcf.value / out.shares.value);
-    if (out.revenue) derive('salesPerShare', out.revenue.value / out.shares.value);
-    if (out.operatingCash) derive('operatingCashPerShare', out.operatingCash.value / out.shares.value);
+    if (out.fcf && out.netBorrowing) derive('fcfePerShare', (out.fcf.value + out.netBorrowing.value) / out.shares.value, '(fcf + netBorrowing) / shares', ['fcf','netBorrowing','shares']);
+    if (out.fcf) derive('fcfProxyPerShare', out.fcf.value / out.shares.value, 'single TTM fcf / current shares; neutral future borrowing; not historical normalization', ['fcf','shares']);
+    if (out.revenue) derive('salesPerShare', out.revenue.value / out.shares.value, 'revenue / shares', ['revenue','shares']);
+    if (out.operatingCash) derive('operatingCashPerShare', out.operatingCash.value / out.shares.value, 'operatingCash / shares', ['operatingCash','shares']);
   }
   return out;
 }
@@ -65,18 +69,12 @@ export async function fetchFairValue(ticker: string, industry?: string): Promise
   if (quote) inputs.price = { value: quote.price, source: quote.source, fetchedAt: new Date().toISOString() };
   if (quote?.currency === 'USD' && location?.us) inputs.usdRiskModel = { value: 1, source: quote.source, fetchedAt: new Date().toISOString() };
   for (const provider of ['stockanalysis', 'finviz'] as const) {
-    if (!location || (provider === 'finviz' && (!location.us || inputs.eps))) break;
+    if (!location || (provider === 'finviz' && !location.us)) break;
     const url = provider === 'stockanalysis'
       ? location.url
       : `https://finviz.com/quote.ashx?t=${encodeURIComponent(ticker)}`;
     try {
-      let html: string;
-      if (useScrapling()) html = await scraplingHtml(url);
-      else {
-        const response = await scopedFetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(8000) });
-        if (!response.ok) { warnings.push(`${provider}: HTTP ${response.status}`); continue; }
-        html = await response.text();
-      }
+      const html = await publicHtml(url);
       checkCancelled();
       // Both adapters target US listings; reject unknown currencies and mismatched stock pages.
       const title = text(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? '');
@@ -94,10 +92,19 @@ export async function fetchFairValue(ticker: string, industry?: string): Promise
       }
       for (const [key, datum] of Object.entries(parsed)) if (!inputs[key]) inputs[key] = datum;
       if (!Object.keys(parsed).length) warnings.push(`${provider}: no recognized fundamentals`);
-    } catch {
+    } catch(error) {
       checkCancelled();
-      warnings.push(`${provider}: unavailable or timed out`);
+      warnings.push(`${provider}: ${error instanceof Error ? error.message : 'unavailable or timed out'}`);
     }
+  }
+  // Filing fallback stays a coherent annual dataset; never graft annual cashflows
+  // onto unknown-date TTM figures. EPS alone did not prevent the HTML supplement.
+  if (quote?.currency === 'USD' && location?.us && !inputs.eps && !inputs.bookPerShare && !inputs.fcf) {
+    try {
+      const annual=await fetchSecAnnual(ticker);
+      Object.assign(inputs,annual);
+      if(Object.keys(annual).length)warnings.push('SEC annual filing fallback: fiscal-year cashflow proxy, not TTM or normalized history; share/split basis should be reviewed.');
+    } catch(error) {checkCancelled();warnings.push(`SEC annual fallback: ${error instanceof Error?error.message:'unavailable'}`);}
   }
   if (quote && financialCurrency !== quote.currency) {
     // No silent EUR/USD or pounds/pence mixing. Quotation remains available.
@@ -111,7 +118,9 @@ export async function fetchFairValue(ticker: string, industry?: string): Promise
   }
   warnings.push('TTM and analyst snapshots; growth forecasts are estimates, not guaranteed cashflows.');
   if (inputs.financialCompany) warnings.push('Financial company: generic industrial FCF models excluded; deposits, lending and regulatory capital need sector-specific treatment.');
-  const result = calculateFairValue(inputs, Date.now(), warnings);
+  const currency = quote?.currency || financialCurrency || 'USD';
+  for (const [key,d] of Object.entries(inputs)) if (/^currency/.test(fundamentalUnit(key))) d.currency = currency;
+  const result = await enrichFromCatalogue(ticker, inputs, Date.now(), warnings, currency, industry);
   result.currency = quote?.currency || financialCurrency || 'USD';
   if (quote) result.quote = { source: quote.source, asOf: quote.asOf, name: quote.name, exchange: quote.exchange, session: 'regular', delayed: true };
   result.externalComparisons = compareExternalFairValues(result, await externalRequest);

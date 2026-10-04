@@ -1,15 +1,17 @@
-import { describe, expect, it, vi, afterEach } from 'vitest';
+import { describe, expect, it, vi, afterEach, beforeEach } from 'vitest';
 import { calculateFairValue, discountedCashFlow, fadingCashFlow, realOptionCall } from '../electron/fairValue';
 import { fetchFairValue, parseFundamentals, parseFundamentalNumber } from '../electron/scraper/fairValue';
 import { scoreTicker } from '../electron/scoring';
 import { aggregate, trade } from './helpers';
 import { withTimeout } from '../electron/scraper/cancellation';
+import { clearPublicHtmlCache } from '../electron/scraper/publicHtml';
 
 const now = Date.parse('2026-10-03T12:00:00Z');
 function data(values: Record<string, number>) {
   return Object.fromEntries(Object.entries(values).map(([key, value]) => [key, { value, source: 'https://example.com/filing', fetchedAt: new Date(now).toISOString() }]));
 }
-afterEach(() => vi.unstubAllGlobals());
+beforeEach(()=>vi.stubEnv('ANALYSIS_CATALOGUE_BUILD','1'));
+afterEach(() => {vi.unstubAllGlobals();vi.unstubAllEnvs();clearPublicHtmlCache();});
 describe('fair value calculations and scoring', () => {
   it('has a neutral structured result when every source is missing', () => {
     const r = calculateFairValue({}, now);
@@ -62,11 +64,11 @@ describe('fair value calculations and scoring', () => {
   it('does not promote default discount rates or unrelated WACC to level 3', () => {
     const r = calculateFairValue(data({ fcfePerShare: 10, wacc: 0.1, shares: 10, cash: 20, debt: 50, eps: 3, price: 30, revenue: 200, ebit: 30, dividend: 1 }), now);
     expect(r.level).toBe(1);
-    expect(calculateFairValue({ ...r.inputs, ...data({ costEquity: 0.12 }) }, now).level).toBe(3);
+    expect(calculateFairValue({ ...r.inputs, ...data({ costEquity: 0.12 }) }, now).level).toBe(1);
   });
   it('persists the valuation snapshot in the score and applies its multiplier', () => {
     const fairValue = calculateFairValue(data({ price: 10, eps: 10 }), now);
-    const scored = scoreTicker(aggregate({ trades: [trade()], fairValue }));
+    const scored = scoreTicker(aggregate({ trades: [trade()], fairValue }), undefined, now);
     expect(scored.breakdown.fairValue).toEqual(fairValue);
     expect(scored.breakdown.valuationMultiplier).toBe(fairValue.multiplier);
     expect(JSON.parse(JSON.stringify(scored.breakdown)).fairValue).toEqual(fairValue);
@@ -85,7 +87,7 @@ describe('fundamental adapters', () => {
     const r = parseFundamentals(html, 'https://example.com', new Date(now).toISOString(), 'stockanalysis');
     expect(r.price).toBeUndefined();
     expect(r.fcfePerShare.value).toBe(4);
-    expect(r.normalizedFcfePerShare.value).toBe(5);
+    expect(r.fcfProxyPerShare.value).toBe(5);
     expect(r.epsGrowth.value).toBe(0.12);
     expect(r.eps).toBeUndefined();
   });

@@ -119,6 +119,7 @@ const api: InsiderTrackerAPI = {
     },
     quitAndInstall: () => ipcRenderer.invoke(IPC.updateQuitAndInstall),
     getUpdateStatus: () => ipcRenderer.invoke(IPC.updateGetStatus),
+    checkForSoftwareUpdates: () => ipcRenderer.invoke(IPC.updateCheck),
     testSchedule: () => ipcRenderer.invoke(IPC.appTestSchedule),
     setTheme: (theme: string) => ipcRenderer.invoke(IPC.appSetTheme, theme),
   },

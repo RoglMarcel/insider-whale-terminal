@@ -1533,18 +1533,7 @@ export const PORTFOLIO_INCEPTION = '2026-09-01';
  * day; beyond this many calendar days the series is treated as gone.
  */
 export const PORTFOLIO_PRICE_SEARCH_DAYS = 5;
-/**
- * UTC hour at/after which a sighting counts as POST-CLOSE, so the signal can
- * only be acted on at the NEXT session's close.
- *
- * 20:00 UTC is 16:00 New York during EDT. Under EST the real close is 21:00
- * UTC, so this errs one hour early for four winter months — it can only ever
- * delay an entry, never advance one, which is the only direction that is safe.
- * Deriving it from a live timezone lookup would make the curve depend on the
- * machine's tz database, and reproducibility matters more than that hour.
- * Measured: 2,201 of 12,728 stored sightings are at/after 20:00 UTC, so this is
- * not a theoretical case.
- */
+/** Legacy explicit override only. Default entries use America/New_York and early closes. */
 export const PORTFOLIO_SESSION_CLOSE_UTC_HOUR = 20;
 
 export type PortfolioCashPolicy = 'spy' | 'idle';
@@ -1966,7 +1955,8 @@ export interface InsiderTrackerAPI {
     onUpdateDownloaded: (cb: (version: string) => void) => () => void;
     onUpdateError: (cb: (err: string) => void) => () => void;
     quitAndInstall: () => Promise<void>;
-    getUpdateStatus: () => Promise<{ status: 'idle' | 'available' | 'downloaded'; version: string }>;
+    getUpdateStatus: () => Promise<import('./softwareUpdate').SoftwareUpdateState>;
+    checkForSoftwareUpdates: () => Promise<import('./softwareUpdate').SoftwareUpdateState>;
     testSchedule: () => Promise<void>;
     setTheme: (theme: string) => Promise<void>;
   };

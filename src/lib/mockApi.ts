@@ -128,6 +128,7 @@ export const mockApi: InsiderTrackerAPI = {
     onUpdateError: () => () => undefined,
     quitAndInstall: async () => undefined,
     getUpdateStatus: async () => ({ status: 'idle', version: '' }),
+    checkForSoftwareUpdates: async () => ({ status: 'current', version: '' }),
     testSchedule: async () => undefined,
     setTheme: async () => undefined,
   },

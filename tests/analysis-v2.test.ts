@@ -77,9 +77,9 @@ describe('global quotes and directories',()=>{
     vi.stubGlobal('fetch',vi.fn().mockResolvedValue(new Response(JSON.stringify({quotes:[{symbol:'AAPL',quoteType:'EQUITY',exchange:'NMS',shortname:'Apple'},{symbol:'AAPL=F',quoteType:'FUTURE'},{symbol:'PINK',quoteType:'EQUITY',exchange:'PNK'}]}))));
     expect((await searchStocks('apple-fixture')).map(s=>s.ticker)).toEqual(['AAPL']);
   });
-  it('parses directory literals without executing scripts and excludes microcaps',()=>{
+  it('parses directory literals without executing scripts and preserves small listings',()=>{
     const html='{s:"AAPL",n:"Apple Inc.",industry:"Hardware",marketCap:3000000000000},{s:"TINY",n:"Small",marketCap:10000},{no:1,s:"etr/SAP",n:"SAP SE",marketCap:10000000000,price:100}';
-    expect(parseStockDirectory(html).map(s=>s.ticker)).toEqual(['AAPL','SAP']);
+    expect(parseStockDirectory(html).map(s=>s.ticker)).toEqual(['AAPL','TINY','SAP']);
     expect(parseStockDirectory(html,'.DE','XETRA').some(s=>s.ticker==='SAP.DE')).toBe(true);
     expect(searchCatalogue(parseStockDirectory(html),'apple')[0].ticker).toBe('AAPL');
   });

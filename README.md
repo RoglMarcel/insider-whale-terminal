@@ -41,9 +41,15 @@ Die Windows-App kann selbst Daten abrufen, angemeldete Quellen verwenden und Des
 
 ---
 
+## Bewertungs- und Updatekorrekturen in 1.6.7
+
+Web und Desktop verwenden die korrigierten gemeinsamen Bewertungsregeln mit drei Qualitätsstufen, EV-Branchenvergleichen, erklärten Datenlücken, Quellenmetadaten und getrennten Szenarien. Alerts zeigen Börsenreferenzkurs und Bewertungsstand sowie eine abweichende historische Score-Bewertung. Caches laufen ab und Fehler können erneut abgerufen werden. Portfolio-Einstiege berücksichtigen New Yorker Börsenzeiten. Softwareupdates haben eine manuelle Prüfung, Status und Wiederholung.
+
+[Bewertungsvertrag und Grenzen](docs/valuation-integrity.md) · [Versionshinweise 1.6.7](docs/releases/1.6.7.md)
+
 ## Technische Dokumentation für KI und Entwickler
 
-Diese Hälfte beschreibt den implementierten Stand von Version **1.6.6**, geprüft am **4. Oktober 2026**. Sie dient als Einstieg in den gesamten Programmablauf. Angaben zu Funktionen, Datenverträgen und Grenzen beziehen sich auf den Code, nicht auf frühere Produktpläne. Laufzeitdaten, Anzahl verfügbarer Aktien und Ergebnisse ändern sich mit den Quellen.
+Diese Hälfte beschreibt den implementierten Stand von Version **1.6.7**, geprüft am **4. Oktober 2026**. Sie dient als Einstieg in den gesamten Programmablauf. Angaben zu Funktionen, Datenverträgen und Grenzen beziehen sich auf den Code, nicht auf frühere Produktpläne. Laufzeitdaten, Anzahl verfügbarer Aktien und Ergebnisse ändern sich mit den Quellen.
 
 **Verbindliche Orientierung:** `package.json` definiert Version und Befehle; `src/types/` definiert Datenverträge; `electron/scoring.ts`, `electron/fairValue.ts` und `src/lib/portfolio-rules.ts` definieren Berechnungen. Die Dateiverzeichnisse und Schnittstellen weiter unten führen zu den konkreten Implementierungen. Historische Prüfberichte in `docs/` beschreiben ihren damaligen Stand und können heutigen Regeln widersprechen.
 
@@ -160,7 +166,7 @@ Web-JSON wird mit Validierung geladen. Der Signal-Cache gilt 60 Sekunden; fehlge
 
 API-Aufrufe und Quellen mit Browser-Sitzungen verwenden weiterhin HTTP beziehungsweise Playwright. Scrapling löst nicht jede IP-Sperre und garantiert keine Datenverfügbarkeit. Der Worker begrenzt Domains und Antworten; er verwendet keine Proxy-Rotation, automatisierte CAPTCHA-Lösung oder Zugangsdaten in Ausgaben. Der Installer-Build prüft den Quellcode-Fingerprint und baut den Worker bei Änderungen neu.
 
-**Ausgeschiedene Bewertungsanbieter:** GuruFocus und ValueInvesting.io sind keine aktiven externen Vergleichsquellen. Seit 1.6.6 wird GuruFocus auch aus dem Fundamentaldaten-Abruf, dessen Cache und den akzeptierten veröffentlichten Datensätzen entfernt. Alte Typnamen und einzelne Legacy-Parser können zur Kompatibilität existieren; sie aktivieren keinen Abruf. `fairValueDisplay.ts` und das Detailpanel filtern alte Vergleichseinträge.
+**Ausgeschiedene Bewertungsanbieter:** GuruFocus und ValueInvesting.io sind keine aktiven externen Vergleichsquellen. Seit 1.6.7 wird GuruFocus auch aus dem Fundamentaldaten-Abruf, dessen Cache und den akzeptierten veröffentlichten Datensätzen entfernt. Alte Typnamen und einzelne Legacy-Parser können zur Kompatibilität existieren; sie aktivieren keinen Abruf. `fairValueDisplay.ts` und das Detailpanel filtern alte Vergleichseinträge.
 
 Externe Anbieter werden pro Provider seriell mit mindestens zwei Sekunden Abstand abgefragt. Nach HTTP 403/429 folgt eine 15-minütige Pause. `cooldown` mit `retryAt` bedeutet, dass für diese Aktie keine neue Anfrage ausgeführt wurde; es ist kein erfolgreicher Abruf mit aktuellem Zeitstempel.
 

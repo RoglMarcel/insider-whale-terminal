@@ -86,6 +86,7 @@ import { scrapeCongressWatchers } from './senatewatcher';
 import { fetchStockAnalysisStats, fetchDrawdown52w } from './stockstats';
 import { fetchFairValue } from './fairValue';
 import { calculateFairValue } from '../fairValue';
+import { upgradeFairValue } from '../../src/lib/fairValueDisplay';
 import { getAnalysisSnapshot } from '../analysisSnapshot';
 
 /** Side-pipeline keys always included in session breakdown + health. */
@@ -1167,7 +1168,8 @@ async function runScrapeInner(opts: RunScrapeOptions, startedAt: string): Promis
   try { for (const s of getLatestSignals()) valuationCache.set(s.ticker, s); } catch { /* first run */ }
   const valuationPending: TickerAggregate[] = [];
   for (const agg of aggregates.filter(a => !tickerIssue(a.ticker))) {
-    const stored = valuationCache.get(agg.ticker)?.breakdown.fairValue;
+    const saved = valuationCache.get(agg.ticker)?.breakdown.fairValue;
+    const stored = saved && upgradeFairValue(saved);
     const previous = agg.fairValue?.fairValue != null ? agg.fairValue : stored;
     const age = previous ? Date.now() - Date.parse(previous.calculatedAt) : Infinity;
     if (previous?.version === 3 && age >= 0 && age < (previous.status === 'unavailable' ? 900_000 : 21_600_000)) {
@@ -1184,11 +1186,12 @@ async function runScrapeInner(opts: RunScrapeOptions, startedAt: string): Promis
     };
     return last(a.ticker) - last(b.ticker);
   });
-  await withTimeout(() => mapLimit(valuationPending, 4, async agg => {
+  await withTimeout(() => mapLimit(valuationPending, 2, async agg => {
     const result = await fetchFairValue(agg.ticker);
     checkCancelled();
     if (result.fairValue != null || agg.fairValue?.fairValue == null) agg.fairValue = result;
   }).then(() => true), 90_000, false);
+  for (const agg of aggregates) if (agg.fairValue) agg.fairValue = upgradeFairValue(agg.fairValue);
   setStatus({ phase: 'Merging & scoring…', currentSource: undefined });
 
   const scrapedAt = new Date().toISOString();

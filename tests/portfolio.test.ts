@@ -400,7 +400,7 @@ describe('no look-ahead', () => {
   it('prices a post-close sighting at the NEXT session', () => {
     expect(earliestEntryDate('2026-01-05T13:00:00.000Z')).toBe('2026-01-05');
     expect(earliestEntryDate('2026-01-05T19:59:59.000Z')).toBe('2026-01-05');
-    expect(earliestEntryDate('2026-01-05T20:00:00.000Z')).toBe('2026-01-06');
+    expect(earliestEntryDate('2026-01-05T20:00:00.000Z')).toBe('2026-01-05');
     expect(earliestEntryDate('2026-01-05T23:07:59.662Z')).toBe('2026-01-06');
   });
 

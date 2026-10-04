@@ -54,6 +54,7 @@ export const IPC = {
   updateError: 'update:error',
   updateQuitAndInstall: 'update:quitAndInstall',
   updateGetStatus: 'update:getStatus',
+  updateCheck: 'update:check',
   appTestSchedule: 'app:testSchedule',
   appSetTheme: 'app:setTheme',
 } as const;
