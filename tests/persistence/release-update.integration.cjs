@@ -20,8 +20,8 @@ async function main(){
   // The normal user action opens the interactive NSIS wizard. On this
   // unattended runner, keep the real IPC/updater/installer path but select
   // its supported silent mode, so installation does not wait for wizard clicks.
-  await instance.evaluate(({app})=>{
-    const updater=require(require('node:path').join(app.getAppPath(),'node_modules','electron-updater')).autoUpdater;
+  await instance.evaluate(()=>{
+    const updater=process.mainModule.require('electron-updater').autoUpdater;
     const install=updater.quitAndInstall.bind(updater);
     updater.quitAndInstall=()=>install(true,false);
   });
