@@ -9,18 +9,24 @@ const report={from:'1.6.6',to:'1.6.7',steps:[]};
 let instance;
 async function main(){
   instance=await _electron.launch({executablePath:executable,args:['--disable-gpu'],timeout:60000});
+  instance.process().stdout?.on('data',data=>process.stdout.write(data));
+  instance.process().stderr?.on('data',data=>process.stderr.write(data));
   let window=await instance.firstWindow();await window.waitForLoadState('domcontentloaded');
   assert.equal(await window.evaluate(()=>window.api.app.getVersion()),'1.6.6');
   report.steps.push('Previous installer and actual application started');
   await window.waitForFunction(async()=> (await window.api.app.getUpdateStatus()).status==='downloaded',undefined,{timeout:180000,polling:1000});
   assert.equal((await window.evaluate(()=>window.api.app.getUpdateStatus())).version,'1.6.7');
   report.steps.push('Automatic startup check recognized and downloaded 1.6.7');
-  await Promise.all([instance.waitForEvent('close',{timeout:60000}),window.evaluate(()=>window.api.app.quitAndInstall()).catch(e=>{if(!/closed|destroyed/i.test(e.message))throw e;})]);
-  instance=undefined;
+  // A packaged app can leave child-process streams open after its main process
+  // quits. Check the actual installed executable rather than Playwright's
+  // connection-close event, which is not the installation contract.
+  await window.evaluate(()=>window.api.app.quitAndInstall()).catch(e=>{if(!/closed|destroyed/i.test(e.message))throw e;});
   const version=()=>cp.execFileSync('powershell.exe',['-NoProfile','-Command',`(Get-Item -LiteralPath '${executable.replace(/'/g,"''")}').VersionInfo.ProductVersion`],{encoding:'utf8',windowsHide:true}).trim();
   const deadline=Date.now()+120000;
   while(version()!=='1.6.7'&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,2000));
-  assert.equal(version(),'1.6.7');report.steps.push('Actual updater installed 1.6.7');
+  report.installedVersion=version();
+  assert.equal(report.installedVersion,'1.6.7');report.steps.push('Actual updater installed 1.6.7');
+  instance=undefined;
   // Installer may relaunch the app; its single-instance process is already
   // active. Stop only this isolated application's exact executable before
   // attaching the second verification session.
