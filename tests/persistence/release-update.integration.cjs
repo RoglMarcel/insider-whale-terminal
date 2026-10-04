@@ -25,7 +25,15 @@ async function main(){
   // A packaged app can leave child-process streams open after its main process
   // quits. Check the actual installed executable rather than Playwright's
   // connection-close event, which is not the installation contract.
-  await instance.evaluate(({app})=>app.quit()).catch(e=>{if(!/closed|destroyed/i.test(e.message))throw e;});
+  await instance.evaluate(({app})=>{
+    // An attached Node inspector delays process exit (and locks the EXE).
+    // Return the evaluation first, then detach this test connection before
+    // the normal production quit/update handlers run.
+    setTimeout(()=>{
+      process.mainModule.require('node:inspector').close();
+      app.quit();
+    },100);
+  }).catch(e=>{if(!/closed|destroyed/i.test(e.message))throw e;});
   const version=()=>cp.execFileSync('powershell.exe',['-NoProfile','-Command',`(Get-Item -LiteralPath '${executable.replace(/'/g,"''")}').VersionInfo.ProductVersion`],{encoding:'utf8',windowsHide:true}).trim().replace(/^(\d+\.\d+\.\d+)\.0$/,'$1');
   const deadline=Date.now()+120000;
   while(version()!=='1.6.7'&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,2000));
