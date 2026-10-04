@@ -17,6 +17,15 @@ async function main(){
   await window.waitForFunction(async()=> (await window.api.app.getUpdateStatus()).status==='downloaded',undefined,{timeout:180000,polling:1000});
   assert.equal((await window.evaluate(()=>window.api.app.getUpdateStatus())).version,'1.6.7');
   report.steps.push('Automatic startup check recognized and downloaded 1.6.7');
+  // The normal user action opens the interactive NSIS wizard. On this
+  // unattended runner, keep the real IPC/updater/installer path but select
+  // its supported silent mode, so installation does not wait for wizard clicks.
+  await instance.evaluate(({app})=>{
+    const updater=require(require('node:path').join(app.getAppPath(),'node_modules','electron-updater')).autoUpdater;
+    const install=updater.quitAndInstall.bind(updater);
+    updater.quitAndInstall=()=>install(true,false);
+  });
+  report.installationMode='Real updater and NSIS installer, unattended silent mode';
   // A packaged app can leave child-process streams open after its main process
   // quits. Check the actual installed executable rather than Playwright's
   // connection-close event, which is not the installation contract.
