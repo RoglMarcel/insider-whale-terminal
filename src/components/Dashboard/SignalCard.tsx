@@ -13,6 +13,7 @@ import { useStore } from '@/store/useStore';
 import { useWatchlist } from '@/hooks/useWatchlist';
 import { formatUSD, formatPrice, formatCompact, confidenceColor } from '@/lib/format';
 import { useI18n } from '@/hooks/useI18n';
+import { AlertFairValue } from '@/components/UI/AlertFairValue';
 
 /** Single-trade ceiling — keep in sync with electron/scraper/util MAX_SANE_TRADE_VALUE. */
 const MAX_SANE_TRADE_VALUE = 5_000_000_000;
@@ -242,6 +243,7 @@ export function SignalCard({ signal }: { signal: Signal }) {
         </div>
       )}
 
+      <AlertFairValue ticker={signal.ticker} recorded={signal.breakdown.fairValue} />
       <div className="mt-auto flex items-center justify-between gap-2 border-t pt-3" style={{ borderColor: 'var(--border-glass)' }}>
         <span className="inline-flex items-center gap-1.5 text-sm text-secondary">
           <UsersIcon size={15} />

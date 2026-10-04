@@ -5,7 +5,7 @@ export interface FundamentalDatum {
 }
 
 export interface FairValueResult {
-  version: 1 | 2;
+  version: 1 | 2 | 3;
   calculatedAt: string;
   currency: string;
   quote?: { source: string; asOf: string; exchange: string; name: string; session: 'regular'; delayed: boolean };
@@ -17,6 +17,9 @@ export interface FairValueResult {
   high: number | null;
   fairValue: number | null;
   upsidePct: number | null;
+  /** Market price relative to central fair value: positive means expensive. */
+  mispricingPct?: number | null;
+  safetyMarginMet?: boolean;
   marginOfSafety: number;
   entryPrice: number | null;
   weight: number;

@@ -13,6 +13,7 @@ import { PoliticianComboBadge, MegaSignalBanner } from '@/components/UI/Politici
 import { FairValuePanel } from '@/components/Valuation/FairValuePanel';
 import { ScoreBreakdown } from './ScoreBreakdown';
 import { FairValuePanel as AlertFairValuePanel } from './FairValuePanel';
+import { useAlertFairValue } from '@/hooks/useAlertFairValue';
 import { InsiderTable } from './InsiderTable';
 import { InsiderAccuracyPanel, type PanelInsider } from './InsiderAccuracyPanel';
 import { OptionsFlow } from './OptionsFlow';
@@ -80,6 +81,7 @@ export function SignalModal() {
   const loadSignals = useStore((s) => s.loadSignals);
   const { isWatched, toggleWatch } = useWatchlist();
   const [signal, setSignal] = useState<Signal | null>(null);
+  const alertValuation = useAlertFairValue(selectedTicker || '', signal?.breakdown.fairValue, true);
   const [loadingSignal, setLoadingSignal] = useState(true);
   const { t, language } = useI18n();
   const [records, setRecords] = useState<Record<string, InsiderTrackRecord>>({});
@@ -492,7 +494,8 @@ export function SignalModal() {
                 </div>
               )}
 
-              <FairValuePanel ticker={selectedTicker} />
+              <AlertFairValuePanel value={alertValuation.value} loading={alertValuation.loading} />
+              <details className="glass rounded-xl p-4"><summary className="cursor-pointer text-sm">{language === 'de' ? 'Weitere institutionelle Bewertungsmodelle' : 'Additional institutional valuation models'}</summary><FairValuePanel ticker={selectedTicker} fallback={alertValuation.value} /></details>
 
               {/* TradingView Chart */}
               <TradingViewChart ticker={selectedTicker} theme={theme} />
@@ -504,7 +507,6 @@ export function SignalModal() {
                 politicianTrades={signal.politicianTrades}
                 rawTrades={signal.rawTrades}
               />
-              <AlertFairValuePanel value={signal.breakdown.fairValue} />
               <InsiderAccuracyPanel insiders={insiders} records={records} loading={trLoading} />
               <InsiderTable trades={signal.rawTrades} trackRecords={records} loading={trLoading} />
               <OptionsFlow options={signal.optionsActivity} />

@@ -24,7 +24,7 @@ export const catalogueAnalysis = {
     const response = await fetch(`${base}analysis/${encodeURIComponent(ticker)}.json`, { cache: 'no-cache', signal: AbortSignal.timeout(12000) });
     if (!response.ok) throw new Error('No published analysis yet for this listing');
     const result = await response.json();
-    if (result.ticker !== ticker || result.valuation?.version !== 2 || !Array.isArray(result.valuation.models)) throw new Error('Invalid published analysis');
+    if (result.ticker !== ticker || result.valuation?.version !== 3 || !Array.isArray(result.valuation.models)) throw new Error('Invalid published analysis');
     return { ...result, origin: 'scheduled' };
   },
 };

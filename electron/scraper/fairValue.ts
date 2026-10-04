@@ -32,12 +32,12 @@ export function parseFundamentals(html: string, source: string, fetchedAt: strin
     ps: 'PS Ratio', pb: 'PB Ratio', pcf: 'P/OCF Ratio', ptbv: 'P/TBV Ratio', peg: 'PEG Ratio',
     evEbit: 'EV / EBIT', evEbitda: 'EV / EBITDA', evSales: 'EV / Sales', dividendYield: 'Dividend Yield',
     epsGrowth: 'EPS Growth Forecast (3Y)', analystTarget: 'Price Target', wacc: 'Weighted Average Cost of Capital (WACC)',
-  } : { eps: 'EPS (ttm)', bookPerShare: 'Book/sh', price: 'Price', dividend: 'Dividend TTM', epsGrowth: 'EPS next 5Y' };
+  } : { eps: 'EPS (ttm)', bookPerShare: 'Book/sh', price: 'Price', dividend: 'Dividend TTM', epsGrowth: 'EPS next 5Y', beta: 'Beta', analystTarget: 'Target Price' };
   const out: Record<string, FundamentalDatum> = {};
   for (const [key, label] of Object.entries(labels)) {
     const raw = rows.get(label) ?? (key === 'cash' ? rows.get('Cash & Cash Equivalents') : undefined);
     if (raw == null) continue;
-    const n = parseFundamentalNumber(raw);
+    const n = parseFundamentalNumber(key === 'dividend' ? raw.replace(/\s*\([^)]*\)\s*$/, '') : raw);
     if (n != null) out[key] = { value: /Growth|wacc|taxRate|roe|roic|payoutRatio|dividendYield/.test(key) ? n / 100 : n, source, fetchedAt };
   }
   const derive = (key: string, value: number) => { if (Number.isFinite(value)) out[key] = { value, source, fetchedAt }; };
@@ -59,6 +59,7 @@ export async function fetchFairValue(ticker: string, industry?: string): Promise
   const location = fundamentalsLocation(ticker);
   let financialCurrency = location?.us ? 'USD' : '';
   if (quote) inputs.price = { value: quote.price, source: quote.source, fetchedAt: new Date().toISOString() };
+  if (quote?.currency === 'USD' && location?.us) inputs.usdRiskModel = { value: 1, source: quote.source, fetchedAt: new Date().toISOString() };
   for (const provider of ['stockanalysis', 'finviz'] as const) {
     if (!location || (provider === 'finviz' && (!location.us || inputs.eps))) break;
     const url = provider === 'stockanalysis'

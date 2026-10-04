@@ -14,10 +14,11 @@ const bundle = buildSync({ stdin: { contents: `
   export { buildInsiderOnly } from './src/lib/insider-only';
   export { DEFAULT_PORTFOLIO_CONFIG } from './src/types';
   export { summarizeAlertSources } from './src/lib/alert-sources';
+  export { calculateFairValue } from './electron/fairValue';
 `, resolveDir: root }, bundle: true, platform: 'node', format: 'cjs', write: false, alias: { '@': path.join(root, 'src') } });
 const fixtureFile = path.join(root, 'tmp/ui-fixtures.cjs');
 fs.writeFileSync(fixtureFile, bundle.outputFiles[0].text);
-const { sampleSignals, sampleLogs, simulatePortfolio, emptyPortfolioState, computeStats, toOpenPosition, toClosedPosition, buildInsiderOnly, DEFAULT_PORTFOLIO_CONFIG, summarizeAlertSources } = require(fixtureFile);
+const { sampleSignals, sampleLogs, simulatePortfolio, emptyPortfolioState, computeStats, toOpenPosition, toClosedPosition, buildInsiderOnly, DEFAULT_PORTFOLIO_CONFIG, summarizeAlertSources, calculateFairValue } = require(fixtureFile);
 const dates = Array.from({ length: 32 }, (_, i) => new Date(Date.UTC(2026, 8, 1 + i)).toISOString().slice(0, 10));
 const series = (fn) => Object.fromEntries(dates.map((d, i) => [d, fn(i)]));
 const input = { config: { ...DEFAULT_PORTFOLIO_CONFIG, inceptionDate: dates[0], slippageBps: 0 }, tradingDays: dates, spy: series(i => 100 + i * .2), prices: { AAA: series(i => 100 + i * .4) }, candidates: [{ ticker: 'AAA', score: 80, earliestDate: dates[0], signalId: null, source: 'signal' }] };
@@ -36,6 +37,10 @@ const fixtures = {
   'portfolio.json': portfolio,
   'update-health.json': { stages: Object.fromEntries(['signals', 'portfolio', 'outcomes'].map(k => [k, { status: 'partial', source: 'Desktop', reason: 'CEOWatcher scraper returned zero rows', lastUpdatedAt: '2026-10-02T12:00:00Z' }])) },
 };
+const valuationNow=Date.now();
+const alertValuations=Object.fromEntries(sampleSignals.map(s=>[s.ticker,calculateFairValue(Object.fromEntries(Object.entries({eps:8,price:100,normalizedFcfePerShare:10,epsGrowth:.06,beta:.5,usdRiskModel:1}).map(([key,value])=>[key,{value,source:'https://stockanalysis.com/stocks/'+s.ticker.toLowerCase()+'/statistics/',fetchedAt:new Date(valuationNow).toISOString()}])),valuationNow)]));
+fixtures['analysis-summary.json']={generatedAt:new Date(valuationNow).toISOString(),stocks:alertValuations};
+for(const s of sampleSignals)fixtures[s.ticker+'.json']={ticker:s.ticker,valuation:alertValuations[s.ticker],origin:'scheduled'};
 // Finance fixtures are explicitly synthetic; live collection is tested separately.
 fixtures['valuations.json'] = { schemaVersion: 1, generatedAt: '2026-10-03T12:00:00Z', stocks: Object.fromEntries(sampleSignals.map(signal => [signal.ticker, [{ ticker: signal.ticker, provider: 'stockrow', url: 'https://stockrow.com/' + signal.ticker, fetchedAt: '2026-10-03T12:00:00Z', currency: 'USD', statementDate: '2026-09-30', price: 50, priceAsOf: '2026-10-02', facts: Object.fromEntries(Object.entries({ shares: 10, operatingCashFlow: 90, capex: 30, netBorrowing: 5, eps: 5, dividendPerShare: 2 }).map(([key,value]) => [key, { value, period: '2026-09-30', unit: key === 'shares' ? 'shares' : ['eps','dividendPerShare'].includes(key) ? 'perShare' : 'currency' }])), annual: { pe: [10,12,14].map((value,i) => ({ value, period: `${2025-i}-09`, unit: 'ratio' })) } }]])) };
 const mime = { '.html': 'text/html', '.js': 'application/javascript', '.css': 'text/css', '.svg': 'image/svg+xml', '.png': 'image/png', '.json': 'application/json' };
@@ -91,6 +96,8 @@ async function contextPage(width, mode = 'full') {
   for (const width of [1440, 820, 390, 320]) {
     const { page, context, jsErrors } = await contextPage(width);
     await page.locator('main [role="button"][aria-label="NVDA"]').waitFor();
+    await page.waitForFunction(()=>document.querySelector('[aria-label="NVDA"] [data-alert-fair-value]')?.innerText.includes('%'));
+    assert.equal(await page.locator('[data-alert-fair-value]').count(), await page.locator('.signal-card').count(), 'Every visible alert has a fair-value block');
     assert.equal(await page.locator('main [aria-label="NVDA"] .font-mono-terminal').first().evaluate(el => getComputedStyle(el).color), 'rgb(237, 237, 241)', 'Ticker text contrast');
     await checkPage(page, `${width}-alerts`);
     const heights = await page.locator('.signal-card').evaluateAll(cards => cards.map(c => c.getBoundingClientRect().height));
@@ -98,6 +105,7 @@ async function contextPage(width, mode = 'full') {
     const icons = await page.getByTestId('summary-stats').locator('svg').evaluateAll(icons => icons.map(i => i.innerHTML));
     assert.notEqual(icons[0], icons[3], 'Combo and total signal icons are distinct');
     await page.locator('main [role="button"][aria-label="NVDA"]').click();
+    await page.getByText('Additional institutional valuation models', {exact:true}).click();
     await page.locator('.valuation-models details').last().waitFor();
     assert.equal(await page.locator('.valuation-models details').count(), 26);
     await page.locator('[data-model="fcfe"] summary').click();
@@ -179,6 +187,7 @@ async function contextPage(width, mode = 'full') {
     assert(!/\bOct\b|\bSep\b|\bAM\b|\bPM\b/.test(await page.locator('main').innerText()), 'German dates and time format in history');
     await navigate(page, width, 'dashboard');
     await page.locator('main [role="button"][aria-label="NVDA"]').click();
+    await page.getByText('Weitere institutionelle Bewertungsmodelle',{exact:true}).click();
     await page.getByText('Fair Value · 26 Bewertungsmodelle',{exact:true}).waitFor();
     await page.locator('[data-model="fcfe"] summary').click();
     const german = await page.locator('[role="dialog"]').innerText();

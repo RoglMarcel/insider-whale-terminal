@@ -2,6 +2,7 @@ import { normalizeAnalysisTicker, type StockAnalysis } from '../src/types/analys
 import { fetchFairValue } from './scraper/fairValue';
 import { calculateFairValue } from './fairValue';
 import { withTimeout } from './scraper/cancellation';
+import { getAnalysisSnapshot } from './analysisSnapshot';
 
 const cache = new Map<string, { at: number; result: StockAnalysis }>();
 const pending = new Map<string, Promise<StockAnalysis>>();
@@ -17,7 +18,8 @@ export async function analyzeStock(input: unknown): Promise<StockAnalysis> {
   const task = (async (): Promise<StockAnalysis> => {
     const fallback = calculateFairValue({}, Date.now(), ['Analysis request exceeded its time budget.']);
     const valuation = await withTimeout(() => fetchFairValue(ticker), 20_000, fallback);
-    const result: StockAnalysis = { ticker, valuation, origin: 'live' };
+    const prior = getAnalysisSnapshot(ticker);
+    const result: StockAnalysis = prior && (valuation.fairValue == null || valuation.status === 'fallback' && prior.valuation.status === 'estimated') ? prior : { ticker, valuation, origin: 'live' };
     if (cache.size >= 200) cache.delete(cache.keys().next().value!);
     cache.set(ticker, { at: Date.now(), result });
     return result;

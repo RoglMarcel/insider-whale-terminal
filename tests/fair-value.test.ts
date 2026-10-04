@@ -32,8 +32,12 @@ describe('fair value calculations and scoring', () => {
     expect(r.recommendation).toBe('undervalued');
     expect(r.multiplier).toBeCloseTo(1.01125);
   });
-  it('requires the safety-adjusted entry threshold', () => {
-    expect(calculateFairValue(data({ eps: 10, price: 80 }), now).recommendation).toBe('watch');
+  it('separates undervaluation from the safety-adjusted entry threshold', () => {
+    const r=calculateFairValue(data({ eps: 10, price: 80 }), now);
+    expect(r.recommendation).toBe('undervalued');
+    expect(r.safetyMarginMet).toBe(false);
+    expect(r.multiplier).toBe(1);
+    expect(r.mispricingPct).toBeCloseTo(-36);
   });
   it('rejects stale/future/invalid observations', () => {
     const inputs = data({ eps: 5, price: Infinity, bookPerShare: 10 });

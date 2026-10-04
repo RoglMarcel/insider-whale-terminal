@@ -1,6 +1,6 @@
 {
   "name": "insider-whale-terminal",
-  "version": "1.6.0",
+  "version": "1.6.1",
   "description": "Insider & Whale Stock Signal Tracker — desktop app that scrapes insider trading and unusual options flow, scores conviction, and ranks tickers.",
   "author": "Insider Tracker",
   "license": "MIT",

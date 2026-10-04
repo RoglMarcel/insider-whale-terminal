@@ -86,6 +86,7 @@ import { scrapeCongressWatchers } from './senatewatcher';
 import { fetchStockAnalysisStats, fetchDrawdown52w } from './stockstats';
 import { fetchFairValue } from './fairValue';
 import { calculateFairValue } from '../fairValue';
+import { getAnalysisSnapshot } from '../analysisSnapshot';
 
 /** Side-pipeline keys always included in session breakdown + health. */
 const SIDE_KEYS = SIDE_PIPELINE_SOURCES.map((s) => s.key);
@@ -1161,14 +1162,15 @@ async function runScrapeInner(opts: RunScrapeOptions, startedAt: string): Promis
   setStatus({ phase: 'Calculating fair values…', currentSource: undefined });
   // Initialize EVERY candidate, including those beyond the bounded network phase.
   // The breakdown persists the inputs, provenance and valuation without a schema migration.
-  for (const agg of aggregates) agg.fairValue = calculateFairValue({}, Date.now(), ['Fundamentals not fetched within this run budget']);
+  for (const agg of aggregates) agg.fairValue = getAnalysisSnapshot(agg.ticker)?.valuation ?? calculateFairValue({}, Date.now(), ['Fundamentals not fetched within this run budget']);
   const valuationCache = new Map<string, Signal>();
   try { for (const s of getLatestSignals()) valuationCache.set(s.ticker, s); } catch { /* first run */ }
   const valuationPending: TickerAggregate[] = [];
   for (const agg of aggregates.filter(a => !tickerIssue(a.ticker))) {
-    const previous = valuationCache.get(agg.ticker)?.breakdown.fairValue;
+    const stored = valuationCache.get(agg.ticker)?.breakdown.fairValue;
+    const previous = agg.fairValue?.fairValue != null ? agg.fairValue : stored;
     const age = previous ? Date.now() - Date.parse(previous.calculatedAt) : Infinity;
-    if (previous?.version === 2 && age >= 0 && age < (previous.status === 'unavailable' ? 900_000 : 21_600_000)) {
+    if (previous?.version === 3 && age >= 0 && age < (previous.status === 'unavailable' ? 900_000 : 21_600_000)) {
       agg.fairValue = previous;
     } else {
       valuationPending.push(agg);
@@ -1185,7 +1187,7 @@ async function runScrapeInner(opts: RunScrapeOptions, startedAt: string): Promis
   await withTimeout(() => mapLimit(valuationPending, 4, async agg => {
     const result = await fetchFairValue(agg.ticker);
     checkCancelled();
-    agg.fairValue = result;
+    if (result.fairValue != null || agg.fairValue?.fairValue == null) agg.fairValue = result;
   }).then(() => true), 90_000, false);
   setStatus({ phase: 'Merging & scoring…', currentSource: undefined });
 

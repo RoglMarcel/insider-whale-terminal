@@ -5,6 +5,7 @@ import { useI18n } from '@/hooks/useI18n';
 import { normalizeAnalysisTicker, type StockAnalysis, type StockSuggestion } from '@/types/analysis';
 import { analysisMoney } from '@/lib/analysisFormat';
 import { FairValuePanel } from '@/components/Detail/FairValuePanel';
+import { upgradeFairValue, valuationComparison } from '@/lib/fairValueDisplay';
 
 export function AnalysisView() {
   const { language } = useI18n();
@@ -56,7 +57,7 @@ export function AnalysisView() {
     try {
       const next = await api.analysis.analyze(ticker);
       if (request.current !== id) return;
-      setResult(next);
+      setResult({ ...next, valuation: upgradeFairValue(next.valuation) });
       setRecent(previous => {
         const updated = [ticker, ...previous.filter(t => t !== ticker)].slice(0, 6);
         try { localStorage.setItem('analysis.recent', JSON.stringify(updated)); } catch { /* optional */ }
@@ -68,6 +69,7 @@ export function AnalysisView() {
   }
   function submit(e: FormEvent) { e.preventDefault(); void analyze(active >= 0 && focused ? suggestions[active].ticker : suggestions.find(s=>s.name.toLowerCase() === query.trim().toLowerCase())?.ticker || query); }
   const fv = result?.valuation;
+  const deviation = valuationComparison(fv);
   const stale = !!fv && Date.now() - Date.parse(fv.calculatedAt) > 24 * 60 * 60 * 1000;
   const limited = !fv || fv.status === 'unavailable' || fv.price == null || stale;
   const attractive = !limited && fv.recommendation === 'undervalued';
@@ -112,16 +114,16 @@ export function AnalysisView() {
         <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-2xl font-bold">{result.ticker}</h2><span className="rounded-full border px-3 py-1 text-sm font-semibold" style={{ color, borderColor: color }}>{label}</span></div>
         {fv.quote && <p className="mt-2 text-xs text-secondary">{fv.quote.name} · {fv.quote.exchange} · {fv.currency}<br/>{de?'Letzter regulärer Börsenkurs: ':'Last regular-session quote: '}{new Date(fv.quote.asOf).toLocaleString()} · {de?'kann verzögert sein':'may be delayed'}</p>}
         <div className="mt-6 grid grid-cols-1 sm:grid-cols-3 gap-5">
-          {[ [de ? 'Referenzkurs' : 'Reference price', money(fv.price)], ['Fair Value', `${money(fv.low)} – ${money(fv.high)}`], [de ? 'Einstieg mit Sicherheitsmarge' : 'Entry with safety margin', money(fv.entryPrice)] ].map(([name, val]) => <div key={name}><div className="text-xs text-secondary">{name}</div><div className="mt-1 text-lg font-semibold">{val}</div></div>)}
+          {[ [de ? 'Referenzkurs' : 'Reference price', money(fv.price)], [de ? 'Zentraler Fair Value' : 'Central fair value', money(fv.fairValue)], [de ? 'Abweichung vom Fair Value' : 'Deviation from fair value', deviation == null ? '—' : `${deviation >= 0 ? '+' : ''}${deviation.toFixed(1)}%`] ].map(([name, val]) => <div key={name}><div className="text-xs text-secondary">{name}</div><div className="mt-1 text-lg font-semibold">{val}</div></div>)}
         </div>
         <h3 className="mt-6 font-semibold">{de ? 'Ist die Aktie kaufenswert?' : 'Is the valuation attractive?'}</h3>
         <p className="mt-2 text-sm leading-relaxed text-secondary">{limited
           ? (de ? 'Für eine aktuelle Kauf-Einordnung fehlen belastbare Daten. Fehlende Werte werden nicht als günstige Bewertung ausgelegt.' : 'There is insufficient current evidence for a purchase assessment. Missing data does not imply a bargain.')
           : attractive
-            ? (de ? 'Der Referenzkurs liegt unter der konservativen Einstiegsschwelle. Das macht die Aktie aus Bewertungssicht zu einem Prüfkandidaten. ' : 'The reference price is below the conservative entry threshold, making it a candidate for further research. ')
+            ? (de ? 'Der Referenzkurs liegt unter dem zentralen Fair Value. Die Aktie ist im Modell unterbewertet und damit ein Prüfkandidat. Ob zusätzlich die strengere Sicherheitsmarge erfüllt ist, wird separat angezeigt. ' : 'The reference price is below central fair value. The stock is undervalued in the model and a research candidate. The stricter margin of safety is shown separately. ')
             : expensive
-              ? (de ? 'Der Referenzkurs liegt über dem Modellkorridor. Die Bewertung spricht derzeit gegen einen Einstieg ohne zusätzliche Wachstumsargumente.' : 'The reference price is above the model range. Valuation does not currently support an entry without additional growth evidence.')
-              : (de ? 'Die geforderte Sicherheitsmarge ist noch nicht erreicht. Aus diesem Modell ergibt sich derzeit kein klarer günstiger Einstieg.' : 'The required margin of safety has not been met. This model does not currently indicate a clearly attractive entry.')}
+              ? (de ? 'Der Referenzkurs liegt über dem zentralen Fair Value. Für einen Kauf wären zusätzliche Argumente zu Wachstum und Qualität nötig.' : 'The reference price is above central fair value. A purchase would require additional growth and quality evidence.')
+              : (de ? 'Der Referenzkurs liegt nahe am zentralen Fair Value (innerhalb von 5%). Das Modell zeigt keine deutliche Unter- oder Überbewertung.' : 'The reference price is close to central fair value (within 5%). The model shows no material under- or overvaluation.')}
           {!limited && fv.level <= 2 && (de ? ' Die Datenbasis ist begrenzt; die Einschätzung hat geringe Verlässlichkeit.' : ' Evidence is limited; this assessment has low confidence.')}
         </p>
         <p className="mt-2 text-xs text-secondary">{de ? 'Die Einordnung bewertet den Preis unter den gezeigten Annahmen. Geschäftsqualität, Wettbewerbsposition und persönliche Anlageziele sind damit nicht vollständig geprüft.' : 'This assessment evaluates price under the stated assumptions. Business quality, competitive position and personal investment objectives are not fully assessed.'}</p>

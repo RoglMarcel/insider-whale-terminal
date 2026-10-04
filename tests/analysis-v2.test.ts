@@ -38,6 +38,24 @@ describe('valuation v2 regression',()=>{
     expect(r.status).toBe('fallback');
     expect(r.fairValue).toBe(100);
   });
+  it('uses disclosed beta-based USD risk assumptions without promoting the level',()=>{
+    const r=calculateFairValue(data({usdRiskModel:1,beta:.36,normalizedFcfePerShare:6,epsGrowth:.04,eps:8,price:125}),now);
+    const rate=.0425+(.67*.36+.33)*.05;
+    expect(r.scenarios?.[1].discount).toBeCloseTo(rate);
+    expect(r.level).toBe(2);
+    expect(r.assumptions.join(' ')).toContain('not live market observations');
+    expect(r.mispricingPct).toBeCloseTo((125/r.fairValue!-1)*100);
+  });
+  it('does not count dividend models as extra votes for the same distributions',()=>{
+    const r=calculateFairValue(data({normalizedFcfePerShare:6,eps:8,dividend:5,epsGrowth:.04,price:125}),now);
+    const dcf=r.models.find(m=>m.name==='DCF-FCFE')!.value!;
+    expect(r.fairValue).toBeCloseTo(dcf);
+  });
+  it('distinguishes per-share growth from total enterprise growth',()=>{
+    const r=calculateFairValue(data({normalizedFcfePerShare:10,epsGrowth:.06,revenueGrowth:.02,fcff:100,wacc:.1,shares:10,cash:0,debt:0}),now);
+    expect(r.models.find(m=>m.name==='DCF-FCFE')!.value).toBeCloseTo(fadingCashFlow(10,.06,.1,.025));
+    expect(r.models.find(m=>m.name==='DCF-FCFF')!.value).toBeCloseTo(fadingCashFlow(100,.02,.1,.025)/10);
+  });
 });
 describe('global quotes and directories',()=>{
   it('preserves foreign suffixes and maps US share classes',()=>{
