@@ -3,6 +3,7 @@ import { calculateFairValue } from '../fairValue';
 import { scopedFetch, checkCancelled } from './cancellation';
 import { fetchMarketQuote, fundamentalsLocation } from '../marketData';
 import { fetchExternalFairValues, compareExternalFairValues } from './externalFairValue';
+import { useScrapling, scraplingHtml } from './scrapling';
 
 const UA = 'Mozilla/5.0 (compatible; InsiderTracker/1.5)';
 const text = (s: string) => s.replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&nbsp;|&#160;/g, ' ').replace(/\s+/g, ' ').trim();
@@ -69,9 +70,13 @@ export async function fetchFairValue(ticker: string, industry?: string): Promise
       ? location.url
       : `https://finviz.com/quote.ashx?t=${encodeURIComponent(ticker)}`;
     try {
-      const response = await scopedFetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(8000) });
-      if (!response.ok) { warnings.push(`${provider}: HTTP ${response.status}`); continue; }
-      const html = await response.text();
+      let html: string;
+      if (useScrapling()) html = await scraplingHtml(url);
+      else {
+        const response = await scopedFetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(8000) });
+        if (!response.ok) { warnings.push(`${provider}: HTTP ${response.status}`); continue; }
+        html = await response.text();
+      }
       checkCancelled();
       // Both adapters target US listings; reject unknown currencies and mismatched stock pages.
       const title = text(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1] ?? '');

@@ -1,6 +1,6 @@
 {
   "name": "insider-whale-terminal",
-  "version": "1.6.2",
+  "version": "1.6.3",
   "description": "Insider & Whale Stock Signal Tracker — desktop app that scrapes insider trading and unusual options flow, scores conviction, and ranks tickers.",
   "author": "Insider Tracker",
   "license": "MIT",
@@ -21,6 +21,7 @@
     "typecheck": "tsc --noEmit -p tsconfig.json && tsc --noEmit -p tsconfig.node.json",
     "dist": "vite build && electron-builder",
     "dist:win": "vite build && electron-builder --win",
+    "predist:win": "node scripts/ensure-scrapling-runtime.cjs",
     "dist:mac": "vite build && electron-builder --mac",
     "rebuild": "electron-builder install-app-deps",
     "verify:scoring": "esbuild scripts/verify-scoring.ts --bundle --platform=node --format=cjs --outfile=tmp/verify-scoring.cjs && node tmp/verify-scoring.cjs",

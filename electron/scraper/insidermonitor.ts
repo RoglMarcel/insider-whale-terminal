@@ -1,5 +1,7 @@
 import type { BrowserContext } from 'playwright';
 import type { RawInsiderTrade } from '../../src/types';
+import { useScrapling, scraplingTable } from './scrapling';
+import type { ExtractedTable } from './util';
 import { withPage } from './browser';
 import { extractFirstTable, colIndex, cell, parseMoney, parseShares, parseDate, cleanTicker, cleanText, sanitizeTradeAmounts, isValidTicker, canonicalTicker } from './util';
 
@@ -13,7 +15,7 @@ import { extractFirstTable, colIndex, cell, parseMoney, parseShares, parseDate, 
  * insider title — when EDGAR/OpenInsider report the same filing they win the
  * dedup and supply the role.
  */
-const URL = 'http://www.insider-monitor.com/insider_stock_purchases.html';
+const URL = 'https://www.insider-monitor.com/insider_stock_purchases.html';
 
 function mapTradeType(code: string): string {
   const c = code.trim().toUpperCase();
@@ -29,12 +31,23 @@ function mapTradeType(code: string): string {
 }
 
 export async function scrapeInsiderMonitor(context: BrowserContext): Promise<RawInsiderTrade[]> {
+  if (useScrapling()) {
+    const table=await scraplingTable(URL,['table']);
+    return parseInsiderMonitorTable({headers:table.headers,rows:table.rows.map(row=>row.cells)});
+  }
   return withPage(
     context,
     URL,
     async (page) => {
       await page.waitForSelector('table', { timeout: 10_000 });
       const table = await extractFirstTable(page, ['table']);
+      return parseInsiderMonitorTable(table);
+    },
+    { waitUntil: 'domcontentloaded', timeout: 20_000, reliable: true },
+  );
+}
+
+export function parseInsiderMonitorTable(table: ExtractedTable): RawInsiderTrade[] {
       const idx = {
         ticker: colIndex(table.headers, ['symbol', 'ticker']),
         company: colIndex(table.headers, ['company']),
@@ -95,7 +108,4 @@ export async function scrapeInsiderMonitor(context: BrowserContext): Promise<Raw
       }
       if (!out.length) throw new Error('Insider Monitor purchase table missing or unreadable');
       return out;
-    },
-    { waitUntil: 'domcontentloaded', timeout: 20_000, reliable: true },
-  );
 }

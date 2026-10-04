@@ -2,10 +2,10 @@
 import json
 import sys
 from urllib.parse import urlparse, urljoin
-from scrapling.fetchers import Fetcher
+from scrapling.fetchers.requests import Fetcher
 from scrapling.parser import Selector
 
-ALLOWED = {'openinsider.com', 'www.secform4.com', 'www.insider-monitor.com', 'stockrow.com', 'www.gurufocus.com', 'www.alphaspread.com', 'valueinvesting.io', 'www.macrotrends.net', 'macrotrends.net', 'www.tikr.com', 'tikr.com'}
+ALLOWED = {'openinsider.com', 'www.secform4.com', 'www.insider-monitor.com', 'stockanalysis.com', 'finviz.com', 'stockrow.com', 'www.gurufocus.com', 'www.alphaspread.com', 'valueinvesting.io', 'www.macrotrends.net', 'macrotrends.net', 'www.tikr.com', 'tikr.com'}
 
 def fetch(url):
     parsed = urlparse(url)
@@ -44,11 +44,15 @@ def table(page, selectors, url):
 if __name__ == '__main__':
     try:
         request = json.load(sys.stdin)
+        if request.get('mode') == 'health':
+            from importlib.metadata import version
+            json.dump({'engine':'scrapling','version':version('scrapling'),'frozen':bool(getattr(sys,'frozen',False))},sys.stdout)
+            sys.exit(0)
         page = fetch(request['url'])
         result = {'html': page.html_content} if request.get('mode') == 'html' else table(page, request['selectors'], request['url'])
         json.dump(result, sys.stdout)
     except Exception as error:
-        if 'request' in locals() and request.get('mode') == 'html':
+        if 'request' in locals():
             import re
             match = re.fullmatch(r'Source HTTP (\d{3})', str(error))
             json.dump({'status': int(match[1]) if match else None}, sys.stdout)

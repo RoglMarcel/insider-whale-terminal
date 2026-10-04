@@ -1,4 +1,5 @@
 import { scopedFetch } from './cancellation';
+import { useScrapling, scraplingHtml } from './scrapling';
 import { parseMoney } from './util';
 
 /**
@@ -54,9 +55,14 @@ export function parseStatsHtml(html: string): EquityStats {
 export async function fetchStockAnalysisStats(ticker: string): Promise<EquityStats | null> {
   try {
     const url = `https://stockanalysis.com/stocks/${ticker.toLowerCase()}/statistics/`;
-    const resp = await scopedFetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10_000) });
-    if (!resp.ok) return null;
-    const stats = parseStatsHtml(await resp.text());
+    let html: string;
+    if (useScrapling()) html = await scraplingHtml(url);
+    else {
+      const resp = await scopedFetch(url, { headers: { 'User-Agent': UA }, signal: AbortSignal.timeout(10_000) });
+      if (!resp.ok) return null;
+      html = await resp.text();
+    }
+    const stats = parseStatsHtml(html);
     return stats.shortPctFloat != null || stats.floatShares != null || stats.avgVolume != null ? stats : null;
   } catch {
     return null;

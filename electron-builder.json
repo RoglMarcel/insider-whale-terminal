@@ -18,6 +18,7 @@
     "package.json"
   ],
   "asar": true,
+  "extraResources": [{"from":"build/scrapling-runtime/scrapling-fetch","to":"scrapling-runtime","filter":["**/*"]}],
   "asarUnpack": [
     "**/node_modules/better-sqlite3/**",
     "**/node_modules/bindings/**",

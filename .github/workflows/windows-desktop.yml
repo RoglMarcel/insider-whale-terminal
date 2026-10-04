@@ -12,6 +12,8 @@ on:
       - 'build/**'
       - 'package*.json'
       - 'electron-builder.json'
+      - 'scripts/scrapling/**'
+      - 'scripts/ensure-scrapling-runtime.cjs'
       - '*config*'
       - 'index.html'
 
@@ -37,6 +39,13 @@ jobs:
         run: npm ci
       - name: Typecheck
         run: npm run typecheck
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Build self-contained Scrapling runtime
+        run: |
+          python -m pip install -r scripts/scrapling/build-requirements.txt
+          python scripts/scrapling/build-runtime.py
       - name: Build Windows installer
         run: npm run dist:win -- --x64 --publish never
         env:

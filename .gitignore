@@ -33,4 +33,5 @@ backtest-*-report.md
 
 # Python test caches
 __pycache__/
+build/scrapling-runtime/
 *.py[cod]
