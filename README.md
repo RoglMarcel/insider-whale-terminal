@@ -45,7 +45,7 @@ Die Windows-App kann selbst Daten abrufen, angemeldete Quellen verwenden und Des
 
 Web und Desktop verwenden die korrigierten gemeinsamen Bewertungsregeln mit drei Qualitätsstufen, EV-Branchenvergleichen, erklärten Datenlücken, Quellenmetadaten und getrennten Szenarien. Alerts zeigen Börsenreferenzkurs und Bewertungsstand sowie eine abweichende historische Score-Bewertung. Caches laufen ab und Fehler können erneut abgerufen werden. Portfolio-Einstiege berücksichtigen New Yorker Börsenzeiten. Softwareupdates haben eine manuelle Prüfung, Status und Wiederholung.
 
-[Bewertungsvertrag und Grenzen](docs/valuation-integrity.md) · [Versionshinweise 1.6.7](docs/releases/1.6.7.md)
+[Bewertungsvertrag und Grenzen](docs/valuation-integrity.md) · [Versionshinweise 1.6.7](docs/releases/1.6.7.md) · [Veröffentlichungs- und Prüfbericht](docs/verification-1.6.7.md)
 
 ## Technische Dokumentation für KI und Entwickler
 
