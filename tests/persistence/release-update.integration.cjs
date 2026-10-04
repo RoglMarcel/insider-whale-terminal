@@ -30,7 +30,7 @@ async function main(){
   // quits. Check the actual installed executable rather than Playwright's
   // connection-close event, which is not the installation contract.
   await window.evaluate(()=>window.api.app.quitAndInstall()).catch(e=>{if(!/closed|destroyed/i.test(e.message))throw e;});
-  const version=()=>cp.execFileSync('powershell.exe',['-NoProfile','-Command',`(Get-Item -LiteralPath '${executable.replace(/'/g,"''")}').VersionInfo.ProductVersion`],{encoding:'utf8',windowsHide:true}).trim();
+  const version=()=>cp.execFileSync('powershell.exe',['-NoProfile','-Command',`(Get-Item -LiteralPath '${executable.replace(/'/g,"''")}').VersionInfo.ProductVersion`],{encoding:'utf8',windowsHide:true}).trim().replace(/^(\d+\.\d+\.\d+)\.0$/,'$1');
   const deadline=Date.now()+120000;
   while(version()!=='1.6.7'&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,2000));
   report.installedVersion=version();
