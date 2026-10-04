@@ -17,19 +17,15 @@ async function main(){
   await window.waitForFunction(async()=> (await window.api.app.getUpdateStatus()).status==='downloaded',undefined,{timeout:180000,polling:1000});
   assert.equal((await window.evaluate(()=>window.api.app.getUpdateStatus())).version,'1.6.7');
   report.steps.push('Automatic startup check recognized and downloaded 1.6.7');
-  // The normal user action opens the interactive NSIS wizard. On this
-  // unattended runner, keep the real IPC/updater/installer path but select
-  // its supported silent mode, so installation does not wait for wizard clicks.
-  await instance.evaluate(()=>{
-    const updater=process.mainModule.require('electron-updater').autoUpdater;
-    const install=updater.quitAndInstall.bind(updater);
-    updater.quitAndInstall=()=>install(true,false);
-  });
-  report.installationMode='Real updater and NSIS installer, unattended silent mode';
+  // Explicit quitAndInstall opens an interactive NSIS wizard. The production
+  // updater's default autoInstallOnAppQuit instead uses its real silent installer
+  // on normal application quit, appropriate for this unattended runner.
+  // Do not substitute another updater: Vite bundles the production singleton.
+  report.installationMode='Production autoInstallOnAppQuit and actual silent NSIS installer';
   // A packaged app can leave child-process streams open after its main process
   // quits. Check the actual installed executable rather than Playwright's
   // connection-close event, which is not the installation contract.
-  await window.evaluate(()=>window.api.app.quitAndInstall()).catch(e=>{if(!/closed|destroyed/i.test(e.message))throw e;});
+  await instance.evaluate(({app})=>app.quit()).catch(e=>{if(!/closed|destroyed/i.test(e.message))throw e;});
   const version=()=>cp.execFileSync('powershell.exe',['-NoProfile','-Command',`(Get-Item -LiteralPath '${executable.replace(/'/g,"''")}').VersionInfo.ProductVersion`],{encoding:'utf8',windowsHide:true}).trim().replace(/^(\d+\.\d+\.\d+)\.0$/,'$1');
   const deadline=Date.now()+120000;
   while(version()!=='1.6.7'&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,2000));
