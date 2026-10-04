@@ -7,6 +7,17 @@ if(!executable||!path.resolve(executable).startsWith(path.resolve(process.env.RU
 const out=path.resolve('tmp/release-update-verification');fs.mkdirSync(out,{recursive:true});
 const report={from:'1.6.6',to:'1.6.7',steps:[]};
 let instance;
+async function waitForUpdateStatus(window,status,timeout){
+  const deadline=Date.now()+timeout;
+  let state;
+  do{
+    state=await window.evaluate(()=>window.api.app.getUpdateStatus());
+    if(state.status===status)return state;
+    if(state.status==='error')throw Error(`Production updater error: ${state.error||JSON.stringify(state)}`);
+    await new Promise(resolve=>setTimeout(resolve,1000));
+  }while(Date.now()<deadline);
+  throw Error(`Expected updater status ${status}; last actual state ${JSON.stringify(state)}`);
+}
 async function main(){
   instance=await _electron.launch({executablePath:executable,args:['--disable-gpu'],timeout:60000});
   instance.process().stdout?.on('data',data=>process.stdout.write(data));
@@ -15,8 +26,8 @@ async function main(){
   let window=await instance.firstWindow();await window.waitForLoadState('domcontentloaded');
   assert.equal(await window.evaluate(()=>window.api.app.getVersion()),'1.6.6');
   report.steps.push('Previous installer and actual application started');
-  await window.waitForFunction(async()=> (await window.api.app.getUpdateStatus()).status==='downloaded',undefined,{timeout:180000,polling:1000});
-  assert.equal((await window.evaluate(()=>window.api.app.getUpdateStatus())).version,'1.6.7');
+  const downloaded=await waitForUpdateStatus(window,'downloaded',180000);
+  assert.equal(downloaded.version,'1.6.7');
   report.steps.push('Automatic startup check recognized and downloaded 1.6.7');
   // Explicit quitAndInstall opens an interactive NSIS wizard. The production
   // updater's default autoInstallOnAppQuit instead uses its real silent installer
@@ -52,7 +63,7 @@ async function main(){
   window=await instance.firstWindow();await window.waitForLoadState('domcontentloaded');
   assert.equal(await window.evaluate(()=>window.api.app.getVersion()),'1.6.7');
   await window.evaluate(()=>window.api.app.checkForSoftwareUpdates());
-  await window.waitForFunction(async()=> (await window.api.app.getUpdateStatus()).status==='current',undefined,{timeout:60000,polling:1000});
+  await waitForUpdateStatus(window,'current',60000);
   await window.screenshot({path:path.join(out,'installed-1.6.7.png')});
   report.steps.push('Installed application starts, manual software check reports current');
   const worker=path.join(path.dirname(executable),'resources','scrapling-runtime','scrapling-fetch.exe');
