@@ -7,9 +7,9 @@ const cache = new Map<string, ExternalFairValue>();
 const blockedUntil = new Map<string, number>();
 const providerQueues = new Map<string, Promise<void>>();
 const nextRequest = new Map<string, number>();
-export const EXTERNAL_PROVIDERS = ['fairvaluecalculator', 'alphaspread', 'gurufocus'] as const;
+export const EXTERNAL_PROVIDERS = ['fairvaluecalculator', 'alphaspread'] as const;
 export function activeExternalComparisons(comparisons: ExternalFairValue[]): ExternalFairValue[] {
-  return comparisons.filter(c => c.provider !== 'valueinvesting');
+  return comparisons.filter(c => c.provider === 'fairvaluecalculator' || c.provider === 'alphaspread');
 }
 // A single request per provider at a time, with spacing even across different tickers.
 async function paced<T>(provider: string, work: () => Promise<T>): Promise<T> {
@@ -61,8 +61,8 @@ export async function fetchExternalFairValues(ticker: string, quote: MarketQuote
   const market = /nasdaq|NMS|NGM|NCM/i.test(exchange) ? 'nasdaq' : /NYSE|NYQ/i.test(exchange) ? 'nyse' : /AMEX|ASE/i.test(exchange) ? 'amex' : null;
   const eligible = /^[A-Z][A-Z0-9.-]{0,11}$/.test(ticker) && !/\.(?:DE|L|PA|AS|TO|T|HK|AX|SW|MI|ST)$/.test(ticker) && quote?.currency === 'USD' && !!market;
   return Promise.all(EXTERNAL_PROVIDERS.map(async provider => {
-    const url = provider === 'alphaspread' ? `https://www.alphaspread.com/security/${market || 'nasdaq'}/${ticker.toLowerCase()}/summary` : provider === 'gurufocus' ? `https://www.gurufocus.com/term/gf-value/${ticker}` : `https://www.fairvalue-calculator.com/stock/${ticker}`;
-    const base: ExternalFairValue = {provider, method:provider === 'alphaspread' ? 'Base case: DCF + relative valuation' : provider === 'gurufocus' ? 'GF Value' : 'Multi-model fair value · CC BY 4.0',url,fetchedAt:new Date().toISOString(),currency:quote?.currency || '',value:null,status:'unsupported'};
+    const url = provider === 'alphaspread' ? `https://www.alphaspread.com/security/${market || 'nasdaq'}/${ticker.toLowerCase()}/summary` : `https://www.fairvalue-calculator.com/stock/${ticker}`;
+    const base: ExternalFairValue = {provider, method:provider === 'alphaspread' ? 'Base case: DCF + relative valuation' : 'Multi-model fair value · CC BY 4.0',url,fetchedAt:new Date().toISOString(),currency:quote?.currency || '',value:null,status:'unsupported'};
     if (!eligible) return {...base,reason:'No verified supported US listing and USD quote'};
     const key = provider+':'+ticker, previous = cache.get(key);
     if (previous && Date.now()-Date.parse(previous.fetchedAt) < (previous.value ? 86_400_000 : 900_000)) return previous;

@@ -5,7 +5,7 @@ from urllib.parse import urlparse, urljoin
 from scrapling.fetchers.requests import Fetcher
 from scrapling.parser import Selector
 
-ALLOWED = {'openinsider.com', 'www.secform4.com', 'www.insider-monitor.com', 'stockanalysis.com', 'finviz.com', 'stockrow.com', 'www.gurufocus.com', 'www.alphaspread.com', 'www.fairvalue-calculator.com', 'www.macrotrends.net', 'macrotrends.net', 'www.tikr.com', 'tikr.com'}
+ALLOWED = {'openinsider.com', 'www.secform4.com', 'www.insider-monitor.com', 'stockanalysis.com', 'finviz.com', 'stockrow.com', 'www.alphaspread.com', 'www.fairvalue-calculator.com', 'www.macrotrends.net', 'macrotrends.net', 'www.tikr.com', 'tikr.com'}
 
 def fetch(url):
     parsed = urlparse(url)

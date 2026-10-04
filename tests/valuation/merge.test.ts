@@ -11,6 +11,7 @@ it('preserves verified dated observations on rejected refreshes and prefers newe
   const newer = { ...old, fetchedAt: '2026-10-04', priceAsOf: '2026-10-02', price: 334 };
   const updated = mergeValuations(seed, { ...empty, stocks: { AAPL: [newer] } });
   expect(updated.stocks.AAPL.find(x => x.provider === old.provider)).toEqual(newer);
-  expect(updated.stocks.AAPL).toHaveLength(2);
+  expect(updated.stocks.AAPL).toHaveLength(seed.stocks.AAPL.length);
+  expect(updated.stocks.AAPL.every(x => x.provider !== 'gurufocus')).toBe(true);
   expect(mergeValuations(updated, { ...empty, stocks: { AAPL: [old] } }).stocks).toEqual(updated.stocks);
 });

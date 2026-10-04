@@ -177,13 +177,13 @@ def main():
     # Authorized provider exports can supplement TIKR and other unavailable public data. Raw export files stay runner-only.
     import_dir=Path(os.environ.get('FUNDAMENTALS_IMPORT_DIR','tmp/fundamentals-imports'))
     for ticker in tickers:
-        if ticker in cache:stocks[ticker]=cache[ticker]
+        if ticker in cache:stocks[ticker]=[d for d in cache[ticker] if d.get('provider') != 'gurufocus']
         if time.monotonic()>budget:continue
         current=stocks.get(ticker,[])
         recent=any(d.get('provider')=='stockrow' and (now-dt.datetime.fromisoformat(d['fetchedAt'])).total_seconds()<7*86400 for d in current)
         if not recent:
             collected=[]
-            for provider,fn in [('stockrow',stockrow),('gurufocus',gurufocus)]:
+            for provider,fn in [('stockrow',stockrow)]:
                 try:
                     data=fn(ticker);collected.append(data);print(f'{provider}: {ticker}: {len(data["facts"])} validated figures')
                 except Exception:print(f'{provider}: {ticker}: no supported public dataset')
@@ -196,14 +196,14 @@ def main():
             if collected:
                 refreshed={d['provider'] for d in collected}
                 stocks[ticker]=[d for d in stocks.get(ticker,[]) if d.get('provider') not in refreshed]+collected
-        for provider in ['stockrow','gurufocus','tikr','macrotrends']:
+        for provider in ['stockrow','tikr','macrotrends']:
             file=import_dir/provider/(ticker+'.json')
             if file.exists():
                 try:
                     d=json.loads(file.read_text());d['provider']=provider;d['ticker']=ticker;d['_imported']=True
                     stocks[ticker]=[x for x in stocks.get(ticker,[]) if x['provider']!=provider]+[d]
                 except Exception:print(f'{provider}: {ticker}: import unreadable')
-    cache_path.parent.mkdir(parents=True,exist_ok=True);cache_path.write_text(json.dumps({t:[d for d in rows if d.get('provider') in {'stockrow','gurufocus','macrotrends'} and not d.get('_imported')] for t,rows in stocks.items()},allow_nan=False))
+    cache_path.parent.mkdir(parents=True,exist_ok=True);cache_path.write_text(json.dumps({t:[d for d in rows if d.get('provider') in {'stockrow','macrotrends'} and not d.get('_imported')] for t,rows in stocks.items()},allow_nan=False))
     # TS validation runs before any data is copied to the public artifact.
     Path('tmp/fundamentals-collected.json').write_text(json.dumps({'schemaVersion':1,'generatedAt':now.isoformat(),'stocks':stocks},allow_nan=False))
 

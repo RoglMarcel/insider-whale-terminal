@@ -28,10 +28,14 @@ describe('external valuation source validation',()=>{
   });
   it('removes retired providers from collection and persisted comparisons',()=>{
     expect(EXTERNAL_PROVIDERS).not.toContain('valueinvesting');
+    expect(EXTERNAL_PROVIDERS).not.toContain('gurufocus');
     const result=calculateFairValue({});
     const legacy={provider:'valueinvesting' as const,method:'Lynch',url:'https://valueinvesting.io',fetchedAt:result.calculatedAt,currency:'USD',value:100,status:'available' as const};
     expect(compareExternalFairValues(result,[legacy])).toEqual([]);
     expect(upgradeFairValue({...result,externalComparisons:[legacy]}).externalComparisons).toEqual([]);
+    const guru={...legacy,provider:'gurufocus' as const};
+    expect(compareExternalFairValues(result,[guru])).toEqual([]);
+    expect(upgradeFairValue({...result,externalComparisons:[guru]}).externalComparisons).toEqual([]);
   });
   it('reports denominator-correct comparisons without changing valuation or scoring',()=>{
     const now=Date.now();const result=calculateFairValue({eps:{value:10,source:'https://example.com',fetchedAt:new Date(now).toISOString()},price:{value:100,source:'https://example.com',fetchedAt:new Date(now).toISOString()}},now);
@@ -49,9 +53,10 @@ describe('external valuation source validation',()=>{
     const html=alpha.replaceAll('AAPL','EXTEST');
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.includes('alphaspread')?new Response(html):new Response('',{status:403})));
     const result=await fetchExternalFairValues('EXTEST',{price:100,currency:'USD',asOf:new Date().toISOString(),name:'Example',exchange:'NasdaqGS',source:'https://example.com'});
-    expect(result.find(c=>c.provider==='alphaspread')?.value).toBe(223.03);expect(result.find(c=>c.provider==='gurufocus')?.status).toBe('blocked');
+    expect(result.find(c=>c.provider==='alphaspread')?.value).toBe(223.03);expect(result.find(c=>c.provider==='fairvaluecalculator')?.status).toBe('blocked');
+    expect(vi.mocked(fetch).mock.calls.every(call=>!String(call[0]).includes('gurufocus'))).toBe(true);
     const second=await fetchExternalFairValues('EXTESTNEXT',{price:100,currency:'USD',asOf:new Date().toISOString(),name:'Example',exchange:'NasdaqGS',source:'https://example.com'});
-    const paused=second.find(c=>c.provider==='gurufocus')!;
+    const paused=second.find(c=>c.provider==='fairvaluecalculator')!;
     expect(paused.status).toBe('cooldown');expect(paused.fetchedAt).toBe('');expect(Date.parse(paused.retryAt!)).toBeGreaterThan(Date.now());
   });
   it('normalizes previously persisted stage 4 to at most 3',()=>{

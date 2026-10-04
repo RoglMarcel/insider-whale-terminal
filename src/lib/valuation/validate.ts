@@ -1,5 +1,5 @@
 import { type Fact, type Fundamentals, type ValuationDocument } from './types';
-const PROVIDERS = ['stockrow','gurufocus','tikr','macrotrends'] as const;
+const PROVIDERS: readonly string[] = ['stockrow','tikr','macrotrends'];
 const DOMAINS: Record<string,string[]> = {stockrow:['stockrow.com'],gurufocus:['gurufocus.com','www.gurufocus.com'],tikr:['tikr.com','www.tikr.com','app.tikr.com'],macrotrends:['macrotrends.net','www.macrotrends.net']};
 const PER_SHARE=new Set(['eps','forwardEps','dividendPerShare','realEps']);
 const FRACTIONS=new Set(['taxRate','payoutRatio','expectedEpsGrowth','riskFreeRate','optionVolatility']);
