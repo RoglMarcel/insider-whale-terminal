@@ -11,6 +11,7 @@ async function main(){
   instance=await _electron.launch({executablePath:executable,args:['--disable-gpu'],timeout:60000});
   instance.process().stdout?.on('data',data=>process.stdout.write(data));
   instance.process().stderr?.on('data',data=>process.stderr.write(data));
+  report.userData=await instance.evaluate(({app})=>app.getPath('userData'));
   let window=await instance.firstWindow();await window.waitForLoadState('domcontentloaded');
   assert.equal(await window.evaluate(()=>window.api.app.getVersion()),'1.6.6');
   report.steps.push('Previous installer and actual application started');
@@ -38,6 +39,9 @@ async function main(){
   const deadline=Date.now()+120000;
   while(version()!=='1.6.7'&&Date.now()<deadline)await new Promise(resolve=>setTimeout(resolve,2000));
   report.installedVersion=version();
+  const updaterLog=path.join(report.userData,'updater.log');
+  if(fs.existsSync(updaterLog)){fs.copyFileSync(updaterLog,path.join(out,'updater.log'));console.log(fs.readFileSync(updaterLog,'utf8'));}
+  report.processes=cp.execFileSync('powershell.exe',['-NoProfile','-Command',`Get-CimInstance Win32_Process | Where-Object { $_.ExecutablePath -eq '${executable.replace(/'/g,"''")}' -or $_.CommandLine -like '*setup-1.6.7.exe*' } | Select-Object ProcessId,Name,ExecutablePath,CommandLine | ConvertTo-Json`],{encoding:'utf8',windowsHide:true});
   assert.equal(report.installedVersion,'1.6.7');report.steps.push('Actual updater installed 1.6.7');
   instance=undefined;
   // Installer may relaunch the app; its single-instance process is already
