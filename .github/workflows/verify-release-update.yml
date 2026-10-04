@@ -1,0 +1,38 @@
+name: Verify installed desktop update
+on:
+  workflow_dispatch: {}
+permissions:
+  contents: read
+jobs:
+  install-and-update:
+    if: github.repository == 'RoglMarcel/insider-whale-terminal'
+    runs-on: windows-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      - name: Install previous version on disposable runner
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'terminal-1.6.6.exe'
+          $folder = Join-Path $env:RUNNER_TEMP 'terminal-update-verification'
+          if (Test-Path $folder) { throw 'Isolated installation folder already exists' }
+          Invoke-WebRequest 'https://github.com/RoglMarcel/insider-whale-terminal/releases/download/v1.6.6/insider-whale-terminal-setup-1.6.6.exe' -OutFile $installer -TimeoutSec 120
+          $process = Start-Process $installer -ArgumentList '/S', "/D=$folder" -Wait -PassThru -WindowStyle Hidden
+          if ($process.ExitCode -ne 0) { throw "Previous installer failed: $($process.ExitCode)" }
+          $exe = Join-Path $folder 'Insider & Whale Terminal.exe'
+          if (!(Test-Path $exe)) { throw 'Installed application missing' }
+          "INSTALLED_APP=$exe" | Out-File $env:GITHUB_ENV -Append -Encoding utf8
+      - name: Exercise actual updater and installation
+        run: node tests/persistence/release-update.integration.cjs
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: installed-update-verification
+          path: tmp/release-update-verification
+          if-no-files-found: error
+          retention-days: 30
