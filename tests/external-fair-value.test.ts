@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
-import { parseExternalFairValue, compareExternalFairValues, fetchExternalFairValues } from '../electron/scraper/externalFairValue';
+import { parseExternalFairValue, compareExternalFairValues, fetchExternalFairValues, EXTERNAL_PROVIDERS } from '../electron/scraper/externalFairValue';
 import { calculateFairValue } from '../electron/fairValue';
 import { upgradeFairValue } from '../src/lib/fairValueDisplay';
 
@@ -17,10 +17,21 @@ describe('external valuation source validation',()=>{
     expect(parseExternalFairValue('<title>AAPL Stock</title><p>Peter Lynch Fair Value: $180</p>','AAPL','gurufocus')).toBeNull();
     expect(parseExternalFairValue('<title>MSFT Stock</title><p>GF Value: $400</p>','AAPL','gurufocus')).toBeNull();
   });
-  it('preserves the explicitly observed Peter Lynch method and source date',()=>{
-    const html='<p>As of 2026-10-04, the Fair Value of Apple Inc (AAPL) is 146.86 USD. This value is based on the Peter Lynch\'s Fair Value formula.</p>';
-    expect(parseExternalFairValue(html,'AAPL','valueinvesting')).toEqual({value:146.86,currency:'USD',asOf:'2026-10-04'});
-    expect(parseExternalFairValue(html,'NVDA','valueinvesting')).toBeNull();
+  it('extracts the exact FVC listing and uses valuation date rather than quote date',()=>{
+    const html='<h1>GameStop Corp. (GME) fair value: what the stock is really worth</h1><div>GME · US</div><p>As of Oct 2, 2026: price $24.70</p><p>GameStop Corp. (GME) currently trades at $24.70, while our model-based Fair Value estimate is $11.77, 52.3% below the price.</p><p class="sp-chart-cap" id="sp-chart-cap">As of Sep 27, 2026.</p>';
+    expect(parseExternalFairValue(html,'GME','fairvaluecalculator')).toEqual({value:11.77,currency:'USD',asOf:'2026-09-27'});
+    expect(parseExternalFairValue(html,'GM','fairvaluecalculator')).toBeNull();
+    expect(parseExternalFairValue(html.replace('GME · US','GME · CA'),'GME','fairvaluecalculator')).toBeNull();
+    expect(parseExternalFairValue(html.replace('Sep 27, 2026','Sep 27, 2099'),'GME','fairvaluecalculator')).toBeNull();
+    expect(parseExternalFairValue(html.replace('$11.77','$0'),'GME','fairvaluecalculator')).toBeNull();
+    expect(parseExternalFairValue('<script>'+html+'</script>','GME','fairvaluecalculator')).toBeNull();
+  });
+  it('removes retired providers from collection and persisted comparisons',()=>{
+    expect(EXTERNAL_PROVIDERS).not.toContain('valueinvesting');
+    const result=calculateFairValue({});
+    const legacy={provider:'valueinvesting' as const,method:'Lynch',url:'https://valueinvesting.io',fetchedAt:result.calculatedAt,currency:'USD',value:100,status:'available' as const};
+    expect(compareExternalFairValues(result,[legacy])).toEqual([]);
+    expect(upgradeFairValue({...result,externalComparisons:[legacy]}).externalComparisons).toEqual([]);
   });
   it('reports denominator-correct comparisons without changing valuation or scoring',()=>{
     const now=Date.now();const result=calculateFairValue({eps:{value:10,source:'https://example.com',fetchedAt:new Date(now).toISOString()},price:{value:100,source:'https://example.com',fetchedAt:new Date(now).toISOString()}},now);
@@ -38,7 +49,10 @@ describe('external valuation source validation',()=>{
     const html=alpha.replaceAll('AAPL','EXTEST');
     vi.stubGlobal('fetch',vi.fn(async(url:string)=>url.includes('alphaspread')?new Response(html):new Response('',{status:403})));
     const result=await fetchExternalFairValues('EXTEST',{price:100,currency:'USD',asOf:new Date().toISOString(),name:'Example',exchange:'NasdaqGS',source:'https://example.com'});
-    expect(result[0].value).toBe(223.03);expect(result[1].status).toBe('blocked');
+    expect(result.find(c=>c.provider==='alphaspread')?.value).toBe(223.03);expect(result.find(c=>c.provider==='gurufocus')?.status).toBe('blocked');
+    const second=await fetchExternalFairValues('EXTESTNEXT',{price:100,currency:'USD',asOf:new Date().toISOString(),name:'Example',exchange:'NasdaqGS',source:'https://example.com'});
+    const paused=second.find(c=>c.provider==='gurufocus')!;
+    expect(paused.status).toBe('cooldown');expect(paused.fetchedAt).toBe('');expect(Date.parse(paused.retryAt!)).toBeGreaterThan(Date.now());
   });
   it('normalizes previously persisted stage 4 to at most 3',()=>{
     const now=Date.now();const v=calculateFairValue({eps:{value:10,source:'https://example.com',fetchedAt:new Date(now).toISOString()}},now);

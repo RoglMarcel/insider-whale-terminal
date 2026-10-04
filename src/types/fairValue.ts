@@ -33,14 +33,15 @@ export interface FairValueResult {
 }
 
 export interface ExternalFairValue {
-  provider: 'alphaspread' | 'gurufocus' | 'valueinvesting';
+  provider: 'alphaspread' | 'gurufocus' | 'fairvaluecalculator' | 'valueinvesting'; // legacy snapshots only for ValueInvesting
   method: string;
   url: string;
   fetchedAt: string;
   asOf?: string;
   currency: string;
   value: number | null;
-  status: 'available' | 'blocked' | 'unavailable' | 'unsupported';
+  status: 'available' | 'blocked' | 'cooldown' | 'unavailable' | 'unsupported';
+  retryAt?: string;
   reason?: string;
   /** Our value relative to the provider, with the provider as denominator. */
   modelDifferencePct?: number | null;

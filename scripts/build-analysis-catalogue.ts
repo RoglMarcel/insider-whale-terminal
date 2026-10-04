@@ -93,8 +93,8 @@ async function main() {
     saveCache(bytes);
     fs.writeFileSync(path.join(root, 'analysis-cache.json.gz'), bytes);
   }
-  const age = (s: CatalogueStock) => cache.results[s.ticker]?.valuation.version === 3 && cache.results[s.ticker].valuation.externalComparisons?.length ? Date.parse(cache.results[s.ticker].valuation.calculatedAt) : 0;
-  const priorities = new Set(['AAPL','NVDA','PEP','MCD','MSFT','AMZN','GOOGL','META','TSLA','BRK-B','SAP.DE','ASML.AS','SHEL.L','7203.T','0700.HK',...alertTickers]);
+  const age = (s: CatalogueStock) => cache.results[s.ticker]?.valuation.version === 3 && cache.results[s.ticker].valuation.externalComparisons?.some(c => c.provider==='fairvaluecalculator') ? Date.parse(cache.results[s.ticker].valuation.calculatedAt) : 0;
+  const priorities = new Set(['AAPL','NVDA','PEP','MCD','GME','MSFT','AMZN','GOOGL','META','TSLA','BRK-B','SAP.DE','ASML.AS','SHEL.L','7203.T','0700.HK',...alertTickers]);
   const queue = cache.stocks.filter(s => process.env.ANALYSIS_FORCE === '1' || Date.now() - age(s) > 18 * 3600_000)
     .sort((a,b) => Number(priorities.has(b.ticker)) - Number(priorities.has(a.ticker)) || age(a) - age(b) || (b.marketCap ?? 0) - (a.marketCap ?? 0));
   const limit = Number(process.env.ANALYSIS_MAX_REFRESH || 2000);

@@ -2,6 +2,7 @@ import type { FairValueResult } from '@/types/fairValue';
 import { calculateFairValue } from '../../electron/fairValue';
 
 export function upgradeFairValue(value: FairValueResult): FairValueResult {
+  value = { ...value, externalComparisons: value.externalComparisons?.filter(c => c.provider !== 'valueinvesting') };
   // Normalize persisted stage-4 snapshots using their original observation date.
   if (value.version === 3 && Number(value.level) <= 3) return value;
   const inputs = { ...value.inputs };
