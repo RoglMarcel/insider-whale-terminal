@@ -1,5 +1,5 @@
 import { cleanPortfolioCandidates } from '../src/lib/ticker-quality';
-import { buildInsiderOnly, INSIDER_ONLY_ID } from '../src/lib/insider-only';
+import { buildInsiderOnly, INSIDER_ONLY_ID, recoverPortfolioEntryCandidates } from '../src/lib/insider-only';
 import nodeFs from 'node:fs';
 import nodePath from 'node:path';
 import {
@@ -289,10 +289,15 @@ async function runSync(): Promise<PortfolioSyncReport> {
   // Derived FROM the candidates, not intersected with the old worklist: an
   // intersection can only lose a ticker, and a candidate without prices comes
   // back as a false "not tradable" in the data-quality line.
-  const experimentCandidates = cleanPortfolioCandidates(archiveExperimentCandidates(INSIDER_ONLY_ID, candidates));
+  const retainedEntries = recoverPortfolioEntryCandidates(getPortfolioPositions()).filter(
+    c => !config.inceptionDate || c.earliestDate >= config.inceptionDate,
+  );
+  const experimentCandidates = cleanPortfolioCandidates(archiveExperimentCandidates(INSIDER_ONLY_ID, [...candidates, ...retainedEntries]));
   const universe = [...new Set([...candidates, ...experimentCandidates].map((c) => c.ticker))].sort();
   // Preserve the experiment's calendar even after rolling source rows expire.
-  const archivedStart = previousExperiment?.state.meta.firstDate ?? start;
+  const retainedStart = experimentCandidates.reduce((first, c) => c.earliestDate < first ? c.earliestDate : first, start);
+  const priorStart = previousExperiment?.state.meta.firstDate ?? start;
+  const archivedStart = retainedStart < priorStart ? retainedStart : priorStart;
   const experimentStart = config.inceptionDate && config.inceptionDate > archivedStart ? config.inceptionDate : archivedStart;
   const fetchStart = experimentStart < start ? experimentStart : start;
   const priceSync = await syncPrices([BENCHMARK, ...universe.filter((t) => t !== BENCHMARK)], fetchStart);

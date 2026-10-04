@@ -4,6 +4,17 @@ import { computeStats, simulatePortfolio, toClosedPosition, toOpenPosition, type
 export const INSIDER_ONLY_ID = 'insider-only-v1';
 export const INSIDER_ONLY_DEFINED_AT = '2026-09-23';
 
+/** Recover observed entry signals when their rolling source rows have expired.
+ * Both strategies replay these dates against the same price book; allocation
+ * and available cash still decide whether either strategy can execute a trade.
+ */
+export function recoverPortfolioEntryCandidates(positions: readonly {
+  ticker: string; entryDate: string; entryScore: number; signalId: number | null;
+}[]): PortfolioSimInput['candidates'] {
+  return positions.map(p => ({ ticker: p.ticker, earliestDate: p.entryDate,
+    score: p.entryScore, signalId: p.signalId, source: 'signal' as const }));
+}
+
 /** Equal target tickets at ENTRY; gains may subsequently drift above 20%. */
 export function insiderOnlyConfig(base: PortfolioConfig): PortfolioConfig {
   return { ...base, startingCash: 10_000, cashPolicy: 'idle',

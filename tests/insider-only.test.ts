@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildInsiderOnly, insiderOnlyConfig } from '../src/lib/insider-only';
+import { buildInsiderOnly, insiderOnlyConfig, recoverPortfolioEntryCandidates } from '../src/lib/insider-only';
 import { simulatePortfolio, type PortfolioSimInput } from '../src/lib/portfolio-rules';
 import { DEFAULT_PORTFOLIO_CONFIG, type PortfolioCandidate } from '../src/types';
 
@@ -13,6 +13,21 @@ const fixture = (): PortfolioSimInput => ({
 const build = (input = fixture()) => buildInsiderOnly(input, '2026-09-23T12:00:00Z');
 
 describe('independent insider-only portfolio', () => {
+  it('recovers an expired early entry and recalculates shares and returns from the shared price book', () => {
+    const input = fixture();
+    input.prices = { GME: series([21.16, 25.03, 24.38]) };
+    input.candidates = [{ ...candidate('GME'), earliestDate: days[1] }];
+    const late = build(input).state;
+    const reference = simulatePortfolio({ ...input, candidates: [candidate('GME')] });
+    input.candidates.push(...recoverPortfolioEntryCandidates(reference.positions));
+    const repaired = build(input).state;
+    expect(late.open[0].entryPrice).toBe(25.03);
+    expect(repaired.open[0].entryDate).toBe(days[0]);
+    expect(repaired.open[0].entryPrice).toBe(reference.positions[0].entryPrice);
+    expect(repaired.open[0].shares).toBeCloseTo(2000 / 21.16);
+    expect(repaired.open[0].unrealizedPct).toBeCloseTo(24.38 / 21.16 - 1);
+    expect(repaired.equity.at(-1)!.equity).toBeCloseTo(8000 + 2000 * 24.38 / 21.16);
+  });
   it('uses $10k, a fixed 20% entry ticket and idle cash while sharing the benchmark', () => {
     const input = fixture(), before = structuredClone(input);
     const result = build(input).state, overlay = simulatePortfolio(input);
