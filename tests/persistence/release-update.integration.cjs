@@ -62,8 +62,18 @@ async function main(){
   instance=await _electron.launch({executablePath:executable,args:['--disable-gpu'],timeout:60000});
   window=await instance.firstWindow();await window.waitForLoadState('domcontentloaded');
   assert.equal(await window.evaluate(()=>window.api.app.getVersion()),'1.6.7');
-  await window.evaluate(()=>window.api.app.checkForSoftwareUpdates());
+  await window.locator('video').waitFor({state:'detached',timeout:20000});
+  // Dismiss the actual first-run release-note slides using their UI controls.
+  for(let step=0;step<30;step++){
+    const next=window.getByRole('button',{name:/^(Next|Weiter|Get Started|Los geht’s)$/});
+    if(!await next.count())break;
+    await next.click();await window.waitForTimeout(100);
+  }
+  const updateSummary=window.locator('summary').filter({hasText:/Software updates|Softwareupdates/});
+  await updateSummary.click();
+  await window.getByRole('button',{name:/^(Check for software update|Auf Softwareupdate prüfen)$/}).click();
   await waitForUpdateStatus(window,'current',60000);
+  await window.waitForFunction(()=>Array.from(document.querySelectorAll('summary')).some(element=>/1\.6\.7.*(Up to date|Aktuell)/.test(element.textContent)),undefined,{timeout:10000});
   await window.screenshot({path:path.join(out,'installed-1.6.7.png')});
   report.steps.push('Installed application starts, manual software check reports current');
   const worker=path.join(path.dirname(executable),'resources','scrapling-runtime','scrapling-fetch.exe');
