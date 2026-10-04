@@ -6,6 +6,7 @@ import { calculateFairValue } from '../electron/fairValue';
 import { parseStockDirectory, type CatalogueStock } from '../electron/analysisCatalogue';
 import type { StockAnalysis } from '../src/types/analysis';
 import { upgradeFairValue } from '../src/lib/fairValueDisplay';
+import { compareExternalFairValues } from '../electron/scraper/externalFairValue';
 
 interface Cache { stocks: CatalogueStock[]; results: Record<string, StockAnalysis> }
 const root = path.resolve('public/data');
@@ -36,6 +37,7 @@ async function main() {
     const old = upgradeFairValue(result.valuation);
     const recalculated = calculateFairValue(old.inputs, Date.parse(old.calculatedAt), old.warnings.filter(w=>!w.startsWith('Model corridor is')));
     result.valuation = {...recalculated,currency:old.currency,quote:old.quote};
+    result.valuation.externalComparisons = compareExternalFairValues(result.valuation, old.externalComparisons || []);
   }
   const sources: [string, string, string, number][] = [
     ['https://stockanalysis.com/stocks/', '', 'US', 20],
@@ -91,7 +93,7 @@ async function main() {
     saveCache(bytes);
     fs.writeFileSync(path.join(root, 'analysis-cache.json.gz'), bytes);
   }
-  const age = (s: CatalogueStock) => cache.results[s.ticker]?.valuation.version === 3 ? Date.parse(cache.results[s.ticker].valuation.calculatedAt) : 0;
+  const age = (s: CatalogueStock) => cache.results[s.ticker]?.valuation.version === 3 && cache.results[s.ticker].valuation.externalComparisons?.length ? Date.parse(cache.results[s.ticker].valuation.calculatedAt) : 0;
   const priorities = new Set(['AAPL','NVDA','PEP','MCD','MSFT','AMZN','GOOGL','META','TSLA','BRK-B','SAP.DE','ASML.AS','SHEL.L','7203.T','0700.HK',...alertTickers]);
   const queue = cache.stocks.filter(s => process.env.ANALYSIS_FORCE === '1' || Date.now() - age(s) > 18 * 3600_000)
     .sort((a,b) => Number(priorities.has(b.ticker)) - Number(priorities.has(a.ticker)) || age(a) - age(b) || (b.marketCap ?? 0) - (a.marketCap ?? 0));
@@ -141,6 +143,7 @@ async function main() {
       const priorWarnings = old.warnings.filter(w => !w.startsWith('Peer benchmarks:') && !w.startsWith('Model corridor is'));
       const recalculated = calculateFairValue(inputs, Date.parse(old.calculatedAt), [...priorWarnings, `Peer benchmarks: same-industry (${stock.industry}) same-day medians; at least 5 other positive observations per ratio, extreme ratios excluded. Source universe: ${peers.map(p=>p.quote?.name || 'unnamed').slice(0,20).join(', ')}.`]);
       result.valuation = { ...recalculated, currency: old.currency, quote: old.quote };
+      result.valuation.externalComparisons = compareExternalFairValues(result.valuation, old.externalComparisons || []);
     }
   }
   for (const [ticker, result] of Object.entries(cache.results)) {

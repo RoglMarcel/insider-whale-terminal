@@ -105,7 +105,7 @@ async function contextPage(width, mode = 'full') {
     const icons = await page.getByTestId('summary-stats').locator('svg').evaluateAll(icons => icons.map(i => i.innerHTML));
     assert.notEqual(icons[0], icons[3], 'Combo and total signal icons are distinct');
     await page.locator('main [role="button"][aria-label="NVDA"]').click();
-    await page.getByText('Additional institutional valuation models', {exact:true}).click();
+    await page.getByText('Additional valuation models', {exact:true}).click();
     await page.locator('.valuation-models details').last().waitFor();
     assert.equal(await page.locator('.valuation-models details').count(), 26);
     await page.locator('[data-model="fcfe"] summary').click();
@@ -187,7 +187,7 @@ async function contextPage(width, mode = 'full') {
     assert(!/\bOct\b|\bSep\b|\bAM\b|\bPM\b/.test(await page.locator('main').innerText()), 'German dates and time format in history');
     await navigate(page, width, 'dashboard');
     await page.locator('main [role="button"][aria-label="NVDA"]').click();
-    await page.getByText('Weitere institutionelle Bewertungsmodelle',{exact:true}).click();
+    await page.getByText('Weitere Bewertungsmodelle',{exact:true}).click();
     await page.getByText('Fair Value · 26 Bewertungsmodelle',{exact:true}).waitFor();
     await page.locator('[data-model="fcfe"] summary').click();
     const german = await page.locator('[role="dialog"]').innerText();

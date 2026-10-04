@@ -5,7 +5,7 @@ from urllib.parse import urlparse, urljoin
 from scrapling.fetchers import Fetcher
 from scrapling.parser import Selector
 
-ALLOWED = {'openinsider.com', 'www.secform4.com', 'www.insider-monitor.com', 'stockrow.com', 'www.gurufocus.com', 'www.macrotrends.net', 'macrotrends.net', 'www.tikr.com', 'tikr.com'}
+ALLOWED = {'openinsider.com', 'www.secform4.com', 'www.insider-monitor.com', 'stockrow.com', 'www.gurufocus.com', 'www.alphaspread.com', 'valueinvesting.io', 'www.macrotrends.net', 'macrotrends.net', 'www.tikr.com', 'tikr.com'}
 
 def fetch(url):
     parsed = urlparse(url)
@@ -13,7 +13,7 @@ def fetch(url):
         raise ValueError('Unsupported public source')
     page = Fetcher.get(url, timeout=20, retries=0, follow_redirects=False, stealthy_headers=False, headers={'User-Agent':'InsiderWhalePublicData/1.0'})
     if page.status != 200:
-        raise ValueError('Source did not return a public page')
+        raise ValueError(f'Source HTTP {page.status}')
     if len(page.body) > 8_000_000:
         raise ValueError('Source page too large')
     return page
@@ -45,8 +45,12 @@ if __name__ == '__main__':
     try:
         request = json.load(sys.stdin)
         page = fetch(request['url'])
-        result = table(page, request['selectors'], request['url'])
+        result = {'html': page.html_content} if request.get('mode') == 'html' else table(page, request['selectors'], request['url'])
         json.dump(result, sys.stdout)
-    except Exception:
+    except Exception as error:
+        if 'request' in locals() and request.get('mode') == 'html':
+            import re
+            match = re.fullmatch(r'Source HTTP (\d{3})', str(error))
+            json.dump({'status': int(match[1]) if match else None}, sys.stdout)
         print('Public source fetch or parsing failed', file=sys.stderr)
         sys.exit(1)

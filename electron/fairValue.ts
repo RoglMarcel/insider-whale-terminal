@@ -131,7 +131,7 @@ export function calculateFairValue(raw: Record<string, FundamentalDatum>, now = 
   const absolute = models.some(m => m.value != null && /^DCF/.test(m.name));
   // A default discount rate is not evidence for level 3, and model count is not accuracy.
   const sourcedDiscount = models.some(m => m.value != null && (m.name === 'DCF-FCFF' && positive('wacc') || m.name === 'DCF-FCFE' && positive('costEquity')));
-  const level: FairValueResult['level'] = models.every(m => m.value != null) && sourcedDiscount ? 4 : absolute && sourcedDiscount && Object.keys(inputs).length >= 10 ? 3 : (absolute && forecasts.length > 0 && Object.keys(inputs).length >= 5) || relativeCount >= 2 && Object.keys(inputs).length >= 5 ? 2 : 1;
+  const level: FairValueResult['level'] = absolute && sourcedDiscount && Object.keys(inputs).length >= 10 ? 3 : (absolute && forecasts.length > 0 && Object.keys(inputs).length >= 5) || relativeCount >= 2 && Object.keys(inputs).length >= 5 ? 2 : 1;
   let values = models.flatMap(m => m.value == null ? [] : [m.value]);
   // Combine independent method families once; two DDM variants are not two votes.
   if (absolute) {
@@ -158,8 +158,8 @@ export function calculateFairValue(raw: Record<string, FundamentalDatum>, now = 
   const spread = level === 3 ? 0.2 : level === 2 ? 0.3 : 0.4;
   const low = median == null ? null : scenarios.length ? Math.min(...scenarios.map(s => s.value), ...values) : Math.min(values[0], median * (1 - spread));
   const high = median == null ? null : scenarios.length ? Math.max(...scenarios.map(s => s.value), ...values) : Math.max(values[values.length - 1], median * (1 + spread));
-  const marginOfSafety = level === 4 ? 0.15 : level === 3 ? 0.2 : level === 2 ? 0.3 : 0.4;
-  const weight = status === 'unavailable' || price == null ? 0 : (level === 4 ? 1 : level === 3 ? 0.75 : level === 2 ? 0.4 : 0.15) * (status === 'fallback' ? 0.5 : 1);
+  const marginOfSafety = level === 3 ? 0.2 : level === 2 ? 0.3 : 0.4;
+  const weight = status === 'unavailable' || price == null ? 0 : (level === 3 ? 0.75 : level === 2 ? 0.4 : 0.15) * (status === 'fallback' ? 0.5 : 1);
   // Apply the safety discount once to the central estimate. The bear scenario
   // already carries a growth/rate stress and must not be discounted twice.
   const entryPrice = median == null ? null : median * (1 - marginOfSafety);

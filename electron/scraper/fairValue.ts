@@ -2,6 +2,7 @@ import type { FundamentalDatum, FairValueResult } from '../../src/types/fairValu
 import { calculateFairValue } from '../fairValue';
 import { scopedFetch, checkCancelled } from './cancellation';
 import { fetchMarketQuote, fundamentalsLocation } from '../marketData';
+import { fetchExternalFairValues, compareExternalFairValues } from './externalFairValue';
 
 const UA = 'Mozilla/5.0 (compatible; InsiderTracker/1.5)';
 const text = (s: string) => s.replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&nbsp;|&#160;/g, ' ').replace(/\s+/g, ' ').trim();
@@ -56,6 +57,8 @@ export async function fetchFairValue(ticker: string, industry?: string): Promise
   const warnings: string[] = [];
   if (!/^[A-Z0-9][A-Z0-9.-]{0,19}$/.test(ticker) || ticker.includes('..')) return calculateFairValue({}, Date.now(), ['Unsupported ticker']);
   const quote = await fetchMarketQuote(ticker);
+  // Start alongside fundamentals so a slow comparison cannot consume the entire analysis budget.
+  const externalRequest = fetchExternalFairValues(ticker, quote).catch(() => []);
   const location = fundamentalsLocation(ticker);
   let financialCurrency = location?.us ? 'USD' : '';
   if (quote) inputs.price = { value: quote.price, source: quote.source, fetchedAt: new Date().toISOString() };
@@ -106,5 +109,7 @@ export async function fetchFairValue(ticker: string, industry?: string): Promise
   const result = calculateFairValue(inputs, Date.now(), warnings);
   result.currency = quote?.currency || financialCurrency || 'USD';
   if (quote) result.quote = { source: quote.source, asOf: quote.asOf, name: quote.name, exchange: quote.exchange, session: 'regular', delayed: true };
+  result.externalComparisons = compareExternalFairValues(result, await externalRequest);
+  checkCancelled();
   return result;
 }

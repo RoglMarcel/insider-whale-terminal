@@ -495,7 +495,7 @@ export function SignalModal() {
               )}
 
               <AlertFairValuePanel value={alertValuation.value} loading={alertValuation.loading} />
-              <details className="glass rounded-xl p-4"><summary className="cursor-pointer text-sm">{language === 'de' ? 'Weitere institutionelle Bewertungsmodelle' : 'Additional institutional valuation models'}</summary><FairValuePanel ticker={selectedTicker} fallback={alertValuation.value} /></details>
+              <details className="glass rounded-xl p-4"><summary className="cursor-pointer text-sm">{language === 'de' ? 'Weitere Bewertungsmodelle' : 'Additional valuation models'}</summary><FairValuePanel ticker={selectedTicker} fallback={alertValuation.value} /></details>
 
               {/* TradingView Chart */}
               <TradingViewChart ticker={selectedTicker} theme={theme} />

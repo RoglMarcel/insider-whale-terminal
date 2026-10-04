@@ -70,6 +70,7 @@ export function AnalysisView() {
   function submit(e: FormEvent) { e.preventDefault(); void analyze(active >= 0 && focused ? suggestions[active].ticker : suggestions.find(s=>s.name.toLowerCase() === query.trim().toLowerCase())?.ticker || query); }
   const fv = result?.valuation;
   const deviation = valuationComparison(fv);
+  const externalConflict = deviation != null && Math.abs(deviation)>5 && fv?.externalComparisons?.some(c=>c.marketMispricingPct!=null && Math.abs(c.marketMispricingPct)>5 && Math.sign(c.marketMispricingPct)!==Math.sign(deviation));
   const stale = !!fv && Date.now() - Date.parse(fv.calculatedAt) > 24 * 60 * 60 * 1000;
   const limited = !fv || fv.status === 'unavailable' || fv.price == null || stale;
   const attractive = !limited && fv.recommendation === 'undervalued';
@@ -126,6 +127,7 @@ export function AnalysisView() {
               : (de ? 'Der Referenzkurs liegt nahe am zentralen Fair Value (innerhalb von 5%). Das Modell zeigt keine deutliche Unter- oder Überbewertung.' : 'The reference price is close to central fair value (within 5%). The model shows no material under- or overvaluation.')}
           {!limited && fv.level <= 2 && (de ? ' Die Datenbasis ist begrenzt; die Einschätzung hat geringe Verlässlichkeit.' : ' Evidence is limited; this assessment has low confidence.')}
         </p>
+        {externalConflict && <p className="mt-2 text-sm" style={{color:'var(--accent-yellow)'}}>{de?'Die externen Bewertungen liefern ein widersprüchliches Urteil. Die Einordnung „günstig/teuer“ gilt für das eigene Modell; Details und Unterschiede stehen im Anbieter-Abgleich.':'External valuations give a conflicting assessment. The below/above value label refers to our own model; see the provider comparison for differences.'}</p>}
         <p className="mt-2 text-xs text-secondary">{de ? 'Die Einordnung bewertet den Preis unter den gezeigten Annahmen. Geschäftsqualität, Wettbewerbsposition und persönliche Anlageziele sind damit nicht vollständig geprüft.' : 'This assessment evaluates price under the stated assumptions. Business quality, competitive position and personal investment objectives are not fully assessed.'}</p>
       </section>
       <div className="grid gap-4 sm:grid-cols-2">
