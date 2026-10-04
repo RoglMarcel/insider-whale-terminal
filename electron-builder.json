@@ -1,0 +1,58 @@
+{
+  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
+  "appId": "com.insiderwhaleterminal.app",
+  "productName": "Insider & Whale Terminal",
+  "copyright": "Copyright © 2026 Insider & Whale Terminal",
+  "publish": {
+    "provider": "github",
+    "owner": "RoglMarcel",
+    "repo": "insider-whale-terminal"
+  },
+  "directories": {
+    "output": "release",
+    "buildResources": "build"
+  },
+  "files": [
+    "dist/**/*",
+    "dist-electron/**/*",
+    "package.json"
+  ],
+  "asar": true,
+  "asarUnpack": [
+    "**/node_modules/better-sqlite3/**",
+    "**/node_modules/bindings/**",
+    "**/node_modules/file-uri-to-path/**",
+    "**/node_modules/playwright/**",
+    "**/node_modules/playwright-core/**"
+  ],
+  "win": {
+    "target": [
+      {
+        "target": "nsis",
+        "arch": ["x64"]
+      }
+    ],
+    "artifactName": "insider-whale-terminal-setup-${version}.${ext}"
+  },
+  "nsis": {
+    "oneClick": false,
+    "perMachine": false,
+    "allowToChangeInstallationDirectory": true,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true
+  },
+  "mac": {
+    "target": [
+      {
+        "target": "dmg",
+        "arch": ["x64", "arm64"]
+      }
+    ],
+    "category": "public.app-category.finance",
+    "artifactName": "${productName}-${version}.${ext}"
+  },
+  "linux": {
+    "target": ["AppImage"],
+    "category": "Finance"
+  }
+}

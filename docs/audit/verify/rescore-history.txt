@@ -1,0 +1,63 @@
+Re-Scoring der gelabelten Historie unter dem AKTUELLEN Modell.
+
+Rekonstruiert den Komposit-Score aus den gespeicherten Komponenten und
+tauscht ausschließlich die Freshness-Regel (`null → 1.0` → `null → Floor`).
+Die Rekonstruktion wird ZUERST gegen die gespeicherten Werte bewiesen;
+Zeilen, die den Beweis nicht bestehen, werden ausgeschlossen, nicht korrigiert.
+
+=== 5 Tage ===
+  Rekonstruktion: 2115/2115 Zeilen reproduzieren den gespeicherten Score (100.0 %)
+    ok-no-options             1889
+    ok-options                 226
+  Von der Regeländerung betroffen: 1086 (51.3 %)
+  Valuation-Multiplikator aus dem Residuum zurückgewonnen: 11 Zeilen (Werte: 0.9, 1.08, 1.15)
+  Score geändert: 0 · Tier gewechselt: 0
+  Mittelwert 10.29 → 10.29
+  IC — ALLE (rekonstruierbare) Zeilen:
+    vorher : n= 2115  n_eff= 1305  IC=+0.003  t_cluster=+0.12  95%-KI [-0.051; 0.058]
+    nachher: n= 2115  n_eff= 1305  IC=+0.003  t_cluster=+0.12  95%-KI [-0.051; 0.058]
+  IC — nur Zeilen mit Inhalt:
+    vorher : n= 1029  n_eff=  816  IC=+0.028  t_cluster=+0.79  95%-KI [-0.041; 0.096]
+    nachher: n= 1029  n_eff=  816  IC=+0.028  t_cluster=+0.79  95%-KI [-0.041; 0.096]
+  Bucket-Monotonie (mit Inhalt): 0.50 → 0.50
+
+=== 10 Tage ===
+  Rekonstruktion: 1442/1442 Zeilen reproduzieren den gespeicherten Score (100.0 %)
+    ok-no-options             1264
+    ok-options                 178
+  Von der Regeländerung betroffen: 794 (55.1 %)
+  Valuation-Multiplikator aus dem Residuum zurückgewonnen: 11 Zeilen (Werte: 0.9, 1.08, 1.15)
+  Score geändert: 0 · Tier gewechselt: 0
+  Mittelwert 10.11 → 10.11
+  IC — ALLE (rekonstruierbare) Zeilen:
+    vorher : n= 1442  n_eff=  606  IC=-0.079  t_cluster=-1.95  95%-KI [-0.158; 0.001]
+    nachher: n= 1442  n_eff=  606  IC=-0.079  t_cluster=-1.95  95%-KI [-0.158; 0.001]
+  IC — nur Zeilen mit Inhalt:
+    vorher : n=  648  n_eff=  344  IC=-0.039  t_cluster=-0.73  95%-KI [-0.145; 0.067]
+    nachher: n=  648  n_eff=  344  IC=-0.039  t_cluster=-0.73  95%-KI [-0.145; 0.067]
+  Bucket-Monotonie (mit Inhalt): 0.50 → 0.50
+
+=== 20 Tage ===
+  Rekonstruktion: 917/917 Zeilen reproduzieren den gespeicherten Score (100.0 %)
+    ok-no-options              813
+    ok-options                 104
+  Von der Regeländerung betroffen: 480 (52.3 %)
+  Valuation-Multiplikator aus dem Residuum zurückgewonnen: 11 Zeilen (Werte: 0.9, 1.08, 1.15)
+  Score geändert: 0 · Tier gewechselt: 0
+  Mittelwert 10.97 → 10.97
+  IC — ALLE (rekonstruierbare) Zeilen:
+    vorher : n=  917  n_eff=  330  IC=-0.149  t_cluster=-2.70  95%-KI [-0.253; -0.042]
+    nachher: n=  917  n_eff=  330  IC=-0.149  t_cluster=-2.70  95%-KI [-0.253; -0.042]
+  IC — nur Zeilen mit Inhalt:
+    vorher : n=  437  n_eff=  190  IC=-0.015  t_cluster=-0.20  95%-KI [-0.157; 0.128]
+    nachher: n=  437  n_eff=  190  IC=-0.015  t_cluster=-0.20  95%-KI [-0.157; 0.128]
+  Bucket-Monotonie (mit Inhalt): 0.50 → 0.50
+
+Lesehilfe:
+  • Die Rekonstruktions-Quote ist die Voraussetzung für alles Weitere. Liegt sie
+    unter 100 %, ist die Differenz NICHT stillschweigend korrigiert worden.
+  • Ein unveränderter IC ist ein Ergebnis, kein Fehlschlag: er heißt, dass die
+    Regeländerung die RANGFOLGE nicht angetastet hat.
+  • Der Datensatz bleibt EIN Marktregime. Nichts hier belegt einen Edge.
+
+Details geschrieben nach tmp\rescore\rescore-history.json

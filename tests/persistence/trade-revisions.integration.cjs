@@ -1,0 +1,72 @@
+const assert = require('node:assert/strict');
+const fs = require('node:fs');
+const os = require('node:os');
+const path = require('node:path');
+const api = require('../../tmp/experiment-db-test.cjs');
+const root = fs.mkdtempSync(path.join(os.tmpdir(),'trade-revisions-'));
+const file = path.join(root,'fixture.db');
+const today = new Date().toISOString().slice(0,10);
+const t = (over={}) => ({ticker:'TEST',insiderName:'Jane Doe',role:'CEO',transactionType:'P - Purchase',tradeDate:today,shares:1000,price:100,value:100000,source:'openinsider',transactionId:'source-trade-1',revisionAt:'2026-09-20T10:00:00Z',...over});
+try {
+  let db=api.initDatabase(file);
+  db.exec("INSERT INTO signals(ticker,score,scraped_at) VALUES('HIST',42,'2026-09-01T12:00:00Z')");
+  api.archivePortfolioRevision('integrity-sentinel',{equity:[10000],open:['KEEP']});
+  api.setPortfolioExperiment({id:'integrity-test',definedAt:today,state:{equity:[{date:today,equity:10000}]}});
+  api.upsertInsiderTrades([t()]);
+  assert.equal(api.getNetInsiderFlow('TEST').buys,100000);
+  api.upsertInsiderTrades([t({value:50000,shares:500,role:'Chairman and CEO',revisionAt:'2026-09-21T10:00:00Z'})]);
+  assert.equal(api.getNetInsiderFlow('TEST').buys,50000);
+  // Later observation of old source version cannot roll back source revision order.
+  api.upsertInsiderTrades([t({observedAt:'2026-09-27T12:00:00Z'})]);
+  assert.equal(api.getNetInsiderFlow('TEST').buys,50000);
+  assert.equal(api.getRecentInsiderTrades()[0].role,'Chairman and CEO');
+  api.upsertInsiderTrades([t({value:100000,revisionAt:'2026-09-22T10:00:00Z'})]);
+  assert.equal(api.getNetInsiderFlow('TEST').buys,100000);
+  const count=db.prepare('SELECT COUNT(*) n FROM insider_trades').get().n;
+  api.upsertInsiderTrades([t({value:100000,revisionAt:'2026-09-22T10:00:00Z'})]);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM insider_trades').get().n,count);
+  api.upsertInsiderTrades([t({ticker:'UNKNOWN',transactionId:'unknown',tradeDate:''}),t({ticker:'INVALID',transactionId:'bad',tradeDate:'2026-02-30'}),t({ticker:'FUTURE',transactionId:'future',tradeDate:'2099-01-01'})]);
+  for (const ticker of ['UNKNOWN','INVALID','FUTURE']) assert.equal(api.getNetInsiderFlow(ticker).buys,0);
+  assert.equal(api.getUnresolvedInsiderTrades().length,3);
+  assert.equal(JSON.parse(db.prepare("SELECT payload FROM insider_trades WHERE ticker='UNKNOWN'").get().payload).tradeDate,'');
+  api.closeDatabase(); db=api.initDatabase(file); api.closeDatabase(); db=api.initDatabase(file);
+  assert.equal(api.getNetInsiderFlow('TEST').buys,100000);
+  assert.equal(db.prepare('SELECT COUNT(*) n FROM signals').get().n,1);
+  assert.deepEqual(JSON.parse(db.prepare("SELECT state_json FROM portfolio_revisions WHERE reason='integrity-sentinel'").get().state_json),{equity:[10000],open:['KEEP']});
+  assert.equal(api.getPortfolioExperiment('integrity-test').state.equity[0].equity,10000);
+  assert.equal(db.pragma('integrity_check',{simple:true}),'ok');
+  // Conflicting unversioned changes must not be guessed into a verified flow.
+  api.upsertInsiderTrades([t({ticker:'CONFLICT',transactionId:'ambiguous',revisionAt:undefined}),t({ticker:'CONFLICT',transactionId:'ambiguous',revisionAt:undefined,value:50000})]);
+  assert.equal(api.getNetInsiderFlow('CONFLICT').buys,0);
+  // Old malformed/future sell-side snapshots cannot leak into a current window.
+  db.prepare("INSERT INTO insider_flow(ticker,flow_date,source,buy_value,sell_value,form144_count) VALUES(?,?,?,?,?,?)").run('FLOW','2099-01-01','legacy',0,900000,99);
+  db.prepare("INSERT INTO insider_flow(ticker,flow_date,source,buy_value,sell_value,form144_count) VALUES(?,?,?,?,?,?)").run('FLOW',today,'legacy',0,50000,1);
+  assert.equal(api.getNetInsiderFlow('FLOW').sells,50000);
+  assert.equal(api.getNetInsiderFlow('FLOW').form144,1);
+  api.upsertInsiderFlow([{ticker:'FLOW',flowDate:'2099-02-30',source:'invalid',buyValue:0,sellValue:999999,form144Count:9}]);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM insider_flow WHERE source='invalid'").get().n,0);
+  const metadata={ticker:'AMEND',insiderName:'Jane Doe',role:'CEO',source:'edgar',issuerCik:'99',reportingOwners:[{cik:'1',name:'Jane Doe',role:'CEO'}],filingDate:'2026-09-02',revisionAt:'2026-09-02T12:00:00Z',filingAccession:'000000009926000001',transactionId:'filing:000000009926000001:row:0',filingRow:0,tradeDate:today,transactionType:'P - Purchase',shares:100,value:10000};
+  api.upsertInsiderTrades([metadata,{...metadata,source:'openinsider',reportingOwners:undefined,filingRow:undefined,transactionId:undefined,sourceUrl:'https://www.sec.gov/Archives/edgar/data/99/000000009926000001/form.xml'},
+    {...metadata,tradeDate:'',shares:0,value:0,amendment:true,originalSubmissionDate:'2026-09-02',filingDate:'2026-09-03',revisionAt:'2026-09-03T12:00:00Z',filingAccession:'000000009926000002',transactionId:'filing:000000009926000002:metadata',filingRow:undefined,integrityStatus:'unlinked-amendment'}]);
+  assert.equal(api.getNetInsiderFlow('AMEND').buys,0);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM insider_trades WHERE ticker='AMEND'").get().n,3);
+  const flow=(sellValue)=>({ticker:'SNAP',flowDate:today,source:'openinsider-sales',buyValue:0,sellValue,form144Count:0});
+  const stamp=(seconds)=>new Date(Date.now()-seconds*1000).toISOString();
+  const snapshot=(rows,startedAt,complete=true)=>({rows,startedAt,complete,from:today,through:today});
+  const older=stamp(30), newer=stamp(20), newest=stamp(10);
+  assert.equal(api.replaceInsiderSalesSnapshot(snapshot([flow(100000)],older)),true);
+  assert.equal(api.replaceInsiderSalesSnapshot(snapshot([flow(50000)],newer)),true);
+  assert.equal(api.getNetInsiderFlow('SNAP').sells,50000);
+  assert.equal(api.replaceInsiderSalesSnapshot(snapshot([flow(900000)],older)),false);
+  assert.equal(api.replaceInsiderSalesSnapshot(snapshot([],newest,false)),false);
+  assert.equal(api.getNetInsiderFlow('SNAP').sells,50000);
+  assert.throws(()=>api.replaceInsiderSalesSnapshot(snapshot([flow(-1)],newest)));
+  assert.equal(api.getNetInsiderFlow('SNAP').sells,50000);
+  assert.equal(api.replaceInsiderSalesSnapshot(snapshot([],newest)),true);
+  assert.equal(api.getNetInsiderFlow('SNAP').sells,0);
+  assert.equal(db.prepare("SELECT COUNT(*) n FROM insider_flow_snapshots").get().n,3);
+  api.closeDatabase(); db=api.initDatabase(file);
+  assert.equal(api.getNetInsiderFlow('SNAP').sells,0);
+  assert.equal(db.pragma('integrity_check',{simple:true}),'ok');
+  console.log('PASS SQLite: down/up revisions, stale reread, roles, idempotence, unknown dates, repeated startup, portfolio/history retention.');
+} finally { api.closeDatabase(); /* Fixture retained for review; no recursive deletion. */ }

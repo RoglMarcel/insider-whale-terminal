@@ -1,0 +1,12 @@
+{
+  "version": 1,
+  "format": "sqlite-gzip",
+  "sha256": "fd1b84393c9649c030b64604692b7f406a5813c52b25d45f6b75cc71c1b6f289",
+  "parts": [
+    {
+      "name": "part-000000.gzpart",
+      "bytes": 1352765,
+      "sha256": "fd1b84393c9649c030b64604692b7f406a5813c52b25d45f6b75cc71c1b6f289"
+    }
+  ]
+}

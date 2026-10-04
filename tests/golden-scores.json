@@ -1,0 +1,107 @@
+[
+  {
+    "name": "empty aggregate",
+    "score": 0,
+    "tier": "LOW",
+    "raw": 0,
+    "confidence": 5
+  },
+  {
+    "name": "single small director buy, unknown cap",
+    "score": 13.5,
+    "tier": "LOW",
+    "raw": 16.354,
+    "confidence": 20
+  },
+  {
+    "name": "clean single CEO buy $600k, fresh, no enrichment",
+    "score": 48.8,
+    "tier": "LOW",
+    "raw": 100,
+    "confidence": 20
+  },
+  {
+    "name": "same CEO buy but on a $2T mega-cap",
+    "score": 8.7,
+    "tier": "LOW",
+    "raw": 10,
+    "confidence": 35
+  },
+  {
+    "name": "four-insider cluster into earnings, elevated VIX",
+    "score": 73.9,
+    "tier": "WATCH",
+    "raw": 297,
+    "confidence": 20
+  },
+  {
+    "name": "the same cluster plus a $2.5M bullish sweep (combo)",
+    "score": 97.5,
+    "tier": "HIGH",
+    "raw": 454.248,
+    "confidence": 20
+  },
+  {
+    "name": "options-only whale signal",
+    "score": 42.8,
+    "tier": "LOW",
+    "raw": 78.624,
+    "confidence": 5
+  },
+  {
+    "name": "insider buy against put-dominated flow",
+    "score": 0,
+    "tier": "LOW",
+    "raw": -110.297,
+    "confidence": 20
+  },
+  {
+    "name": "stale buy at the freshness floor",
+    "score": 16.7,
+    "tier": "LOW",
+    "raw": 21,
+    "confidence": 20
+  },
+  {
+    "name": "undateable buy (date failed to parse)",
+    "score": 0,
+    "tier": "LOW",
+    "raw": 0,
+    "confidence": 5
+  },
+  {
+    "name": "award-only aggregate (nothing eligible)",
+    "score": 0,
+    "tier": "LOW",
+    "raw": 0,
+    "confidence": 5
+  },
+  {
+    "name": "10b5-1 plan buy (reduced weight)",
+    "score": 27.6,
+    "tier": "LOW",
+    "raw": 40,
+    "confidence": 20
+  },
+  {
+    "name": "congressional cluster + insider + options (MEGA tier)",
+    "score": 88.2,
+    "tier": "HIGH",
+    "raw": 251.559,
+    "confidence": 20
+  },
+  {
+    "name": "politician-only aggregate (no insider, no options)",
+    "score": 0,
+    "tier": "LOW",
+    "raw": 0,
+    "confidence": 5
+  },
+  {
+    "name": "strong track record + deep undervaluation",
+    "score": 64.8,
+    "tier": "WATCH",
+    "raw": 193.2,
+    "confidence": 50
+  }
+]

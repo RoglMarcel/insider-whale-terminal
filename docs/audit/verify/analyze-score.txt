@@ -1,0 +1,80 @@
+    80–100 n=   3  Ø=   8.29%  95%-KI=[   2.09%,   14.50%]  Treffer=100%  ⚠ zu kleine Stichprobe (aus der Monotonie ausgeschlossen)
+               Bucket-Monotonie (nur n≥30): 0.50  (1.00 = perfekt steigend)
+  Out-of-Sample (zeitlicher Split, nur Zeilen mit Inhalt):
+    Schnitt 2026-07-30   IS: IC=0.064 (n=442, t_cluster=1.04)   OOS: IC=0.016 (n=587, t_cluster=0.32)
+
+=== 10 Tage · Eintritts-Zeitraum 2026-07-10 → 2026-08-03 ===
+  mit Inhalt   n=  648  Ticker= 255  ρ=0.57  n_eff=  344
+               IC=-0.039  t_naiv= -1.00  t_cluster= -0.73  95%-KI=[-0.145, 0.067]  → im Rauschen
+     0–19  n= 343  Ø=   1.07%  95%-KI=[  -0.38%,    2.51%]  Treffer= 50%
+    20–39  n= 204  Ø=  -2.64%  95%-KI=[  -4.14%,   -1.14%]  Treffer= 43%
+    40–59  n=  83  Ø=  -0.12%  95%-KI=[  -4.82%,    4.59%]  Treffer= 48%
+    60–79  n=  15  Ø=   6.24%  95%-KI=[   2.30%,   10.18%]  Treffer= 87%  ⚠ zu kleine Stichprobe (aus der Monotonie ausgeschlossen)
+    80–100 n=   3  Ø=   9.76%  95%-KI=[   2.47%,   17.05%]  Treffer=100%  ⚠ zu kleine Stichprobe (aus der Monotonie ausgeschlossen)
+               Bucket-Monotonie (nur n≥30): 0.50  (1.00 = perfekt steigend)
+
+  inhaltsleer  n=  794  Ticker= 111  ρ=0.26  n_eff=  303
+               IC=-0.008  t_naiv= -0.22  t_cluster= -0.13  95%-KI=[-0.120, 0.105]  → im Rauschen
+     0–19  n= 794  Ø=   0.71%  95%-KI=[  -0.23%,    1.66%]  Treffer= 56%
+               Bucket-Monotonie (nur n≥30): — (zu wenige auswertbare Buckets)
+
+  ALLE         n= 1442  Ticker= 354  ρ=0.45  n_eff=  606
+               IC=-0.079  t_naiv= -3.00  t_cluster= -1.95  95%-KI=[-0.158, 0.001]  → im Rauschen
+     0–19  n=1137  Ø=   0.82%  95%-KI=[   0.02%,    1.62%]  Treffer= 54%
+    20–39  n= 204  Ø=  -2.64%  95%-KI=[  -4.14%,   -1.14%]  Treffer= 43%
+    40–59  n=  83  Ø=  -0.12%  95%-KI=[  -4.82%,    4.59%]  Treffer= 48%
+    60–79  n=  15  Ø=   6.24%  95%-KI=[   2.30%,   10.18%]  Treffer= 87%  ⚠ zu kleine Stichprobe (aus der Monotonie ausgeschlossen)
+    80–100 n=   3  Ø=   9.76%  95%-KI=[   2.47%,   17.05%]  Treffer=100%  ⚠ zu kleine Stichprobe (aus der Monotonie ausgeschlossen)
+               Bucket-Monotonie (nur n≥30): 0.50  (1.00 = perfekt steigend)
+  Out-of-Sample (zeitlicher Split, nur Zeilen mit Inhalt):
+    Schnitt 2026-07-17   IS: IC=-0.055 (n=282, t_cluster=-0.62)   OOS: IC=-0.024 (n=366, t_cluster=-0.34)
+
+=== 20 Tage · Eintritts-Zeitraum 2026-07-10 → 2026-07-19 ===
+  mit Inhalt   n=  437  Ticker= 177  ρ=0.88  n_eff=  190
+               IC=-0.015  t_naiv= -0.31  t_cluster= -0.20  95%-KI=[-0.157, 0.128]  → im Rauschen
+     0–19  n= 219  Ø=  -0.32%  95%-KI=[  -3.05%,    2.42%]  Treffer= 44%
+    20–39  n= 145  Ø=  -3.47%  95%-KI=[  -6.35%,   -0.58%]  Treffer= 38%
+    40–59  n=  64  Ø=  -3.27%  95%-KI=[ -10.22%,    3.69%]  Treffer= 38%
+    60–79  n=   7  Ø=   5.69%  95%-KI=[  -0.61%,   11.98%]  Treffer= 71%  ⚠ zu kleine Stichprobe (aus der Monotonie ausgeschlossen)
+    80–100 n=   2  Ø=   5.52%  95%-KI=[  -0.40%,   11.43%]  Treffer=100%  ⚠ zu kleine Stichprobe (aus der Monotonie ausgeschlossen)
+               Bucket-Monotonie (nur n≥30): 0.50  (1.00 = perfekt steigend)
+
+  inhaltsleer  n=  480  Ticker= 107  ρ=0.52  n_eff=  170
+               IC= 0.032  t_naiv=  0.69  t_cluster=  0.41  95%-KI=[-0.119, 0.181]  → im Rauschen
+     0–19  n= 480  Ø=   1.36%  95%-KI=[  -0.01%,    2.74%]  Treffer= 59%
+               Bucket-Monotonie (nur n≥30): — (zu wenige auswertbare Buckets)
+
+  ALLE         n=  917  Ticker= 276  ρ=0.77  n_eff=  330
+               IC=-0.149  t_naiv= -4.51  t_cluster= -2.70  95%-KI=[-0.253, -0.042]  → signifikant NEGATIV
+     0–19  n= 699  Ø=   0.84%  95%-KI=[  -0.52%,    2.20%]  Treffer= 55%
+    20–39  n= 145  Ø=  -3.47%  95%-KI=[  -6.35%,   -0.58%]  Treffer= 38%
+    40–59  n=  64  Ø=  -3.27%  95%-KI=[ -10.22%,    3.69%]  Treffer= 38%
+    60–79  n=   7  Ø=   5.69%  95%-KI=[  -0.61%,   11.98%]  Treffer= 71%  ⚠ zu kleine Stichprobe (aus der Monotonie ausgeschlossen)
+    80–100 n=   2  Ø=   5.52%  95%-KI=[  -0.40%,   11.43%]  Treffer=100%  ⚠ zu kleine Stichprobe (aus der Monotonie ausgeschlossen)
+               Bucket-Monotonie (nur n≥30): 0.50  (1.00 = perfekt steigend)
+  Out-of-Sample (zeitlicher Split, nur Zeilen mit Inhalt):
+    Schnitt 2026-07-12   IS: IC=-0.078 (n=183, t_cluster=-0.79)   OOS: IC=0.041 (n=254, t_cluster=0.54)
+
+=== Faktor-Aktivität über alle gespeicherten Signale ===
+  (wie oft weicht der Faktor überhaupt von seinem Neutralwert ab?)
+  Freshness                    6713/10541   63.7%  aktiv
+  Insider rank                 6176/10541   58.6%  aktiv
+  Dollar volume                4639/10541   44.0%  aktiv
+  Transaction type             4365/10541   41.4%  aktiv
+  Cluster                      1635/10541   15.5%  aktiv
+  Earnings timing (insider)     702/10541    6.7%  selten aktiv
+  Earnings timing (options)     702/10541    6.7%  selten aktiv
+  Track record                  508/10541    4.8%  selten aktiv
+  Options flow                  454/10541    4.3%  selten aktiv
+  Politician leg                 61/10541    0.6%  nahezu inaktiv
+  VIX                             0/10541    0.0%  INAKTIV — nicht widerlegt, nie testbar
+  Valuation                       0/10541    0.0%  INAKTIV — nicht widerlegt, nie testbar
+  Corroboration mult              0/10541    0.0%  INAKTIV — nicht widerlegt, nie testbar
+
+─────────────────────────────────────────────────────────────────────
+Lesehilfe:
+  • t_cluster, nicht t_naiv, ist die belastbare Zahl. n_eff berücksichtigt,
+    dass derselbe Ticker mehrfach vorkommt und die Halteperioden überlappen.
+  • Der zeitliche Split liegt INNERHALB eines Marktregimes. Er zeigt
+    Stabilität, nicht Generalisierung.
+  • Eine Verbesserung auf diesem Datensatz ist KEIN Beleg für einen Edge.

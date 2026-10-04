@@ -1,0 +1,14 @@
+{
+  "name": "Insider & Whale Terminal",
+  "short_name": "Insider",
+  "description": "Ranked insider-trade and unusual-options conviction signals.",
+  "start_url": ".",
+  "scope": ".",
+  "display": "standalone",
+  "background_color": "#050507",
+  "theme_color": "#050507",
+  "orientation": "portrait-primary",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}

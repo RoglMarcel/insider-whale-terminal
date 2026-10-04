@@ -1,0 +1,36 @@
+node_modules
+dist
+dist-electron
+dist-web
+release
+public/data
+build/icon.*
+*.log
+npm-debug.log*
+.DS_Store
+Thumbs.db
+*.local
+.env
+.env.*
+*.db
+!data/insider-tracker.db
+*.db-journal
+*.sqlite
+.vite
+tmp
+
+# Windows reserved device name — accidental redirect artifact (see git "short read while indexing NUL")
+NUL
+
+
+# local editor/agent config (kept out of the repo)
+.claude
+*.db-wal
+*.db-shm
+
+# generated backtest reports (deleted from the repo on purpose)
+backtest-*-report.md
+
+# Python test caches
+__pycache__/
+*.py[cod]
