@@ -21,6 +21,12 @@ import time
 TAG = 'history-data'
 ASSET = re.compile(r'^history-\d+-\d+-([0-9a-f]{64})\.db\.gz$')
 DESKTOP_TABLES = {
+    'backtest_decisions': ['key'],
+    'backtest_purchases': ['key'],
+    'backtest_trades': ['key'],
+    'backtest_closures': ['key'],
+    'backtest_analyses': ['key'],
+    'backtest_replays': ['key'],
     'signals': ['ticker', 'scraped_at'],
     'scrape_log': ['started_at'],
     'insider_trades': ['ticker', 'insider_key', 'trade_date', 'value_cents'],
@@ -97,9 +103,19 @@ def merge_desktop(target, incoming):
     """Same identities as electron/webPublish.ts; preserve cloud-only tables."""
     with closing(sqlite3.connect(target)) as db:
         db.execute('ATTACH DATABASE ? AS desktop', (str(incoming.resolve()),))
+        # Backtest tables are additive; old desktop snapshots remain compatible.
+        for table in DESKTOP_TABLES:
+            if table.startswith('backtest_'):
+                fields = ('key TEXT PRIMARY KEY, portfolio TEXT NOT NULL, portfolio_id TEXT NOT NULL, strategy TEXT NOT NULL, snapshot TEXT NOT NULL'
+                          if table == 'backtest_purchases' else
+                          'key TEXT PRIMARY KEY, payload TEXT NOT NULL' if table == 'backtest_decisions' else
+                          'key TEXT PRIMARY KEY, purchase_key TEXT NOT NULL, payload TEXT NOT NULL')
+                db.execute(f'CREATE TABLE IF NOT EXISTS "{table}" ({fields})')
         for table, identity in DESKTOP_TABLES.items():
             columns = [r[1] for r in db.execute(f'PRAGMA main.table_info("{table}")')]
             source = [r[1] for r in db.execute(f'PRAGMA desktop.table_info("{table}")')]
+            if not source and table.startswith('backtest_'):
+                continue
             cols = [c for c in columns if c != 'id' and c in source]
             if not all(c in cols for c in identity):
                 raise RuntimeError(f'Cannot safely merge desktop table {table}')

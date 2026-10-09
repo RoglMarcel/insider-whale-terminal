@@ -1,5 +1,7 @@
 # Insider & Whale Terminal
 
+**Version 1.7.0:** Die neue Seite **Backtest** archiviert Depotentscheidungen mit unveränderlichen Kauf-Snapshots, Handelsverlauf, versionierten Abschlussanalysen und JSON-Export. Fehlende historische Daten bleiben ausdrücklich gekennzeichnet. Umsetzung, Prüfungen und Grenzen sind in [Backtest 1.7](docs/backtest-1.7.md) dokumentiert.
+
 **Insider-Aktivität verstehen. Aktien bewerten. Strategien vergleichen.**
 
 Insider & Whale Terminal bündelt Aktienkäufe von Unternehmensinsidern, auffällige Optionsaktivität und ergänzende Marktinformationen. Du kannst interessante Aktien finden, eine Aktie selbst analysieren, ihren geschätzten Fair Value mit dem Kurs vergleichen und drei simulierte Portfolios gegen den S&P 500 betrachten. Die Bewertungen erklären ihre Datenbasis und Annahmen; sie sind keine garantierten Kursziele oder automatischen Kaufaufträge.
@@ -12,6 +14,7 @@ Insider & Whale Terminal bündelt Aktienkäufe von Unternehmensinsidern, auffäl
 - **Aktien analysieren:** Name oder Börsenkürzel eingeben; Fundamentaldaten, zentralen Fair Value und modellierte Unter-/Überbewertung ansehen.
 - **Strategien vergleichen:** S&P 500, kleine Signalpositionen mit S&P 500 und ein Insider-Portfolio mit gleichem Startkapital gegenüberstellen.
 - **Den Überblick behalten:** Aktien merken, Signal-Details öffnen und verfügbare Aktualisierungsstände prüfen.
+- **Entscheidungen nachprüfen:** Unter Backtest damalige Alert-Daten mit den Ergebnissen geschlossener Positionen vergleichen und strukturierte Daten für die spätere Auswertung exportieren.
 
 ## Schnell starten
 

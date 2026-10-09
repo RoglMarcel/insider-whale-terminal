@@ -69,6 +69,10 @@ const api: InsiderTrackerAPI = {
     rebuild: () => ipcRenderer.invoke(IPC.portfolioRebuild),
     setConfig: (config: Partial<PortfolioConfig>) => ipcRenderer.invoke(IPC.portfolioSetConfig, config),
   },
+  backtest: {
+    getState: () => ipcRenderer.invoke(IPC.backtestGetState),
+    retry: (key: string) => ipcRenderer.invoke(IPC.backtestRetry, key),
+  },
   shadow: {
     get: () => ipcRenderer.invoke(IPC.shadowGetConfig),
     set: (config) => ipcRenderer.invoke(IPC.shadowSetConfig, config),

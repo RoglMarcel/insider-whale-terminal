@@ -1,6 +1,6 @@
 {
   "name": "insider-whale-terminal",
-  "version": "1.6.7",
+  "version": "1.7.0",
   "description": "Insider & Whale Stock Signal Tracker — desktop app that scrapes insider trading and unusual options flow, scores conviction, and ranks tickers.",
   "author": "Insider Tracker",
   "license": "MIT",
@@ -39,7 +39,8 @@
     "golden:update": "esbuild scripts/gen-golden.ts --bundle --platform=node --format=cjs --outfile=tmp/gen-golden.cjs && node tmp/gen-golden.cjs",
     "portfolio:sync": "esbuild scripts/sync-portfolio.ts --bundle --platform=node --format=cjs --external:better-sqlite3 --alias:electron=./scripts/electron-stub.ts --outfile=tmp/sync-portfolio.cjs && node scripts/run-node-or-electron.cjs tmp/sync-portfolio.cjs",
     "portfolio:sweep": "esbuild scripts/portfolio-sweep.ts --bundle --platform=node --format=cjs --external:better-sqlite3 --alias:electron=./scripts/electron-stub.ts --outfile=tmp/portfolio-sweep.cjs && node scripts/run-node-or-electron.cjs tmp/portfolio-sweep.cjs",
-    "verify:portfolio": "esbuild scripts/verify-portfolio.ts --bundle --platform=node --format=cjs --external:better-sqlite3 --alias:electron=./scripts/electron-stub.ts --outfile=tmp/verify-portfolio.cjs && node scripts/run-node-or-electron.cjs tmp/verify-portfolio.cjs"
+    "verify:portfolio": "esbuild scripts/verify-portfolio.ts --bundle --platform=node --format=cjs --external:better-sqlite3 --alias:electron=./scripts/electron-stub.ts --outfile=tmp/verify-portfolio.cjs && node scripts/run-node-or-electron.cjs tmp/verify-portfolio.cjs",
+    "verify:backtest": "esbuild scripts/verify-backtest.ts --bundle --platform=node --format=cjs --external:better-sqlite3 --outfile=tmp/verify-backtest.cjs && node scripts/run-node-or-electron.cjs tmp/verify-backtest.cjs && esbuild scripts/verify-backtest-sync.ts --bundle --platform=node --format=cjs --external:better-sqlite3 --outfile=tmp/verify-backtest-sync.cjs && node scripts/run-node-or-electron.cjs tmp/verify-backtest-sync.cjs"
   },
   "dependencies": {
     "better-sqlite3": "^11.3.0",

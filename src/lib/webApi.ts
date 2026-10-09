@@ -11,6 +11,8 @@ import {
 import { emptyPortfolioState } from './portfolio-rules';
 import { mockApi } from './mockApi';
 import { catalogueAnalysis } from './analysisCatalogueApi';
+import type { BacktestState } from '../types/backtest';
+import { mergeLocalBacktest, retryLocalBacktest } from './backtest-web';
 
 /**
  * Web API (v1.1.2) — the "read-only" InsiderTrackerAPI for the hosted website.
@@ -71,6 +73,7 @@ async function loadSignals(force = false): Promise<Signal[]> {
 }
 
 const loadMeta = () => loadJson<Meta>('meta.json', {}).catch(() => ({} as Meta));
+const loadBacktest = (): Promise<BacktestState> => loadJson<BacktestState>('backtest.json', { schemaVersion: 1, generatedAt: '', records: [], readOnly: true });
 
 /** Published portfolio state; an absent file means "not built yet", not an error. */
 const loadPortfolio = (): Promise<PortfolioState> =>
@@ -161,6 +164,10 @@ export const webApi: InsiderTrackerAPI = {
     sync: () => loadPortfolio(),
     rebuild: () => loadPortfolio(),
     setConfig: () => loadPortfolio(),
+  },
+  backtest: {
+    getState: async () => mergeLocalBacktest(await loadBacktest()),
+    retry: async (key) => retryLocalBacktest(await loadBacktest(), key),
   },
   history: {
     // Real sessions, published in meta.json by the runner — this is what makes the

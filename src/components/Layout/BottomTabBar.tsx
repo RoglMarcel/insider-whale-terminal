@@ -26,6 +26,7 @@ const TABS: Tab[] = [
   // fits ~60px and overflowed the bar at 360px. Shortening the WORD is the right
   // trade — shrinking the touch target is not.
   { key: 'settings', label: 'nav.settingsShort', icon: SettingsIcon },
+  { key: 'backtest', label: 'nav.backtest', icon: HistoryIcon },
 ];
 
 const VISIBLE_TABS = TABS.filter((tb) => !(isWeb && tb.desktopOnly));

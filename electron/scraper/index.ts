@@ -9,6 +9,7 @@ import {
   type RawInsiderTrade,
   type OptionsActivity,
   type Signal,
+  type VixQuote,
   type ScrapeStatus,
   type ScrapeResult,
   type ScrapeError,
@@ -33,6 +34,7 @@ import {
 import { launchBrowser, createContext, installChromium, type InsiderScraper, type OptionsScraper } from './browser';
 import { sanitizeTickerRows, classifyStockPageResponse } from './util';
 import { scoreTicker, isScoringEligible, getRankWeight, normalizeAggregateTrades } from '../scoring';
+import type { DecisionContext } from '../../src/types/backtest';
 import {
   insertSignals,
   recordTickerQuality,
@@ -576,6 +578,7 @@ export interface RunScrapeOptions {
   settings: AppSettings;
   /** Feature 8 — current VIX value to fold into scoring + scrape_log. */
   vix?: number;
+  vixQuote?: VixQuote | null;
   onStatus?: (status: ScrapeStatus) => void;
 }
 
@@ -1204,6 +1207,7 @@ async function runScrapeInner(opts: RunScrapeOptions, startedAt: string): Promis
   } catch {
     /* shadow scoring is best-effort */
   }
+  const decisionContexts: Record<string, DecisionContext> = {};
   let signals: Signal[] = aggregates.filter((agg) => {
     if (!tickerIssue(agg.ticker)) return true;
     recordTickerQuality(agg.ticker);
@@ -1229,11 +1233,15 @@ async function runScrapeInner(opts: RunScrapeOptions, startedAt: string): Promis
     // scoreTicker is pure, so the repaired amounts have to be written onto the
     // aggregate explicitly — `agg.trades` is what gets persisted and rendered.
     normalizeAggregateTrades(agg);
-    const scored = scoreTicker(agg);
+    const scoringAt = Date.now();
+    const scored = scoreTicker(agg, DEFAULT_SCORING_CONFIG, scoringAt);
+    const trackRecords = [...new Set(agg.trades.map(t => t.insiderName))].map(name => getTrackRecord(name)).filter((r): r is InsiderTrackRecord => r != null);
+    decisionContexts[agg.ticker] = { scoringAt: new Date(scoringAt).toISOString(), aggregate: agg,
+      scoringConfig: DEFAULT_SCORING_CONFIG, shadowConfig, vixQuote: opts.vixQuote ?? null, trackRecords };
     // Always persist the legacy flat-bonus score for A/B of the soft-mult model.
     // Optional shadowConfig knobs still produce an alternate score when set —
     // prefer explicit config shadow over legacy when both exist.
-    const configShadow = shadowConfig ? scoreTicker(agg, shadowConfig).score : null;
+    const configShadow = shadowConfig ? scoreTicker(agg, shadowConfig, scoringAt).score : null;
     const shadowScore = configShadow ?? scored.legacyScore ?? null;
     return {
       ticker: scored.ticker,
@@ -1300,7 +1308,7 @@ async function runScrapeInner(opts: RunScrapeOptions, startedAt: string): Promis
   let persisted = false;
   if (signals.length) {
     try {
-      insertSignals(signals);
+      insertSignals(signals, decisionContexts);
       persisted = true;
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);

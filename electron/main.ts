@@ -51,6 +51,7 @@ import {
 } from './database';
 import { computePerformanceReport } from './performance';
 import { getPortfolioState, rebuildPortfolio, syncPortfolio, updatePortfolioConfig } from './portfolio';
+import { getBacktestState, retryBacktest } from './backtest';
 import { runScrape, getScrapeStatus, fetchStockAnalysisEarnings } from './scraper';
 import { publishToWeb } from './webPublish';
 import { launchBrowser, createContext } from './scraper/browser';
@@ -186,9 +187,11 @@ async function withPooledBrowser<T>(fn: (browser: Browser) => Promise<T>): Promi
 
 async function triggerScrape(): Promise<ScrapeResult> {
   const settings = getSettings();
+  const vixQuote = getCachedVix();
   const result = await runScrape({
     settings,
-    vix: getCachedVix()?.value,
+    vix: vixQuote?.value,
+    vixQuote,
     onStatus: (status) => broadcast(IPC.scraperStatusUpdate, status),
   });
 
@@ -215,10 +218,11 @@ async function triggerScrape(): Promise<ScrapeResult> {
   // Roll the testing portfolio forward. Deliberately NOT awaited into the
   // scrape's result: it talks to Yahoo, and a scrape that already succeeded
   // must never be reported as failed because a price fetch timed out.
-  void syncPortfolio()
+  const portfolioSync = syncPortfolio()
     .then((r) => {
       if (r.ok) console.log(`[main] portfolio: +${r.daysWritten} day(s), ${r.pricesFetched} series fetched`);
       else console.log(`[main] portfolio not run: ${r.reason}`);
+      broadcast(IPC.appSignalsUpdated, getLatestSignals());
     })
     .catch((err) => console.error('[main] portfolio sync threw (non-fatal):', err));
 
@@ -227,7 +231,7 @@ async function triggerScrape(): Promise<ScrapeResult> {
   // already succeeded locally must not be reported as failed because a push did
   // not land. Errors are surfaced to the UI instead.
   if (settings.webPublishEnabled) {
-    void publishToWeb({ repoPath: settings.webPublishRepoPath || undefined })
+    void portfolioSync.then(() => publishToWeb({ repoPath: settings.webPublishRepoPath || undefined }))
       .then((res) => {
         if (res.pushed) {
           console.log('[main] web publish: pushed', res.copied);
@@ -634,6 +638,8 @@ function registerIpc(): void {
   // Testing portfolio. Sync/rebuild talk to Yahoo, so they are async; getState
   // is a pure read and stays cheap enough to call on every tab switch.
   handle(IPC.portfolioGetState, () => getPortfolioState());
+  handle(IPC.backtestGetState, () => getBacktestState());
+  handle(IPC.backtestRetry, (_e, key: string) => retryBacktest(key));
   handle(IPC.portfolioSync, async () => {
     await syncPortfolio();
     return getPortfolioState();

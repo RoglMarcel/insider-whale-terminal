@@ -1,4 +1,5 @@
 import { cleanPortfolioCandidates } from '../src/lib/ticker-quality';
+import { recordBacktestBook, recordBacktestClosures, analyzePendingBacktests, getBacktestState } from './backtest';
 import { buildInsiderOnly, INSIDER_ONLY_ID, recoverPortfolioEntryCandidates } from '../src/lib/insider-only';
 import nodeFs from 'node:fs';
 import nodePath from 'node:path';
@@ -20,6 +21,7 @@ import {
 } from '../src/lib/portfolio-rules';
 import {
   clearPortfolio,
+  getDb,
   archivePortfolioRevision,
   getPortfolioExperiment,
   setPortfolioExperiment,
@@ -237,7 +239,8 @@ async function runSync(): Promise<PortfolioSyncReport> {
   const priorMeta = getPortfolioRunMeta();
   if (priorMeta && (priorMeta.curveVersion ?? 1) < 5) archivePortfolioRevision('ticker-cleanup-v1', getPortfolioState());
   const previousExperiment = getPortfolioExperiment(INSIDER_ONLY_ID);
-  const firstSignal = getPortfolioHistoryStart(config.entryScore) ?? previousExperiment?.state.meta.firstDate;
+  const firstSignal = [getPortfolioHistoryStart(config.entryScore), priorMeta?.backfillStart,
+    previousExperiment?.state.meta.firstDate].filter((d): d is string => !!d).sort()[0];
   if (!firstSignal) {
     return { ok: false, reason: 'no signal has ever reached the entry threshold', daysWritten: 0, restatedDays: 0, rebuilt: false, pricesFetched: 0, suspectPoints: 0 };
   }
@@ -283,7 +286,7 @@ async function runSync(): Promise<PortfolioSyncReport> {
   // threshold", which after the reset is mostly signals from before inception —
   // dozens of series fetched from Yahoo on every run for tickers the engine is
   // about to discard. Narrowing an existing list can only ever remove work.
-  const candidates = buildCandidates(config).filter(
+  const sourceCandidates = buildCandidates(config).filter(
     (c) => !config.inceptionDate || c.earliestDate >= config.inceptionDate,
   );
   // Derived FROM the candidates, not intersected with the old worklist: an
@@ -292,6 +295,10 @@ async function runSync(): Promise<PortfolioSyncReport> {
   const retainedEntries = recoverPortfolioEntryCandidates(getPortfolioPositions()).filter(
     c => !config.inceptionDate || c.earliestDate >= config.inceptionDate,
   );
+  // A 90-day holding must survive the rolling signal/outcome window. Keep the
+  // first observed entry candidates so the SAME purchase can eventually close,
+  // rather than vanish from a replay when its source row expires.
+  const candidates = cleanPortfolioCandidates(archiveExperimentCandidates('main-backtest-v1.7', [...retainedEntries, ...sourceCandidates]));
   const experimentCandidates = cleanPortfolioCandidates(archiveExperimentCandidates(INSIDER_ONLY_ID, [...candidates, ...retainedEntries]));
   const universe = [...new Set([...candidates, ...experimentCandidates].map((c) => c.ticker))].sort();
   // Preserve the experiment's calendar even after rolling source rows expire.
@@ -360,8 +367,17 @@ async function runSync(): Promise<PortfolioSyncReport> {
   }
   const daysWritten = insertPortfolioEquity(sim.equity);
 
-  replacePortfolioPositions(sim.positions);
-  replacePortfolioEvents(sim.events);
+  getDb().transaction(() => {
+    replacePortfolioPositions(sim.positions);
+    replacePortfolioEvents(sim.events);
+    recordBacktestBook('Hauptdepot', config, sim.positions);
+    recordBacktestClosures('Hauptdepot', config, sim.positions);
+    const positions = [...experiment.state.open, ...experiment.state.closed];
+    setPortfolioExperiment(experiment);
+    recordBacktestBook('Insider Only', experiment.state.config, positions);
+    recordBacktestClosures('Insider Only', experiment.state.config, positions);
+  })();
+  analyzePendingBacktests();
   insertPortfolioSuspectEvents(priceSync.suspect);
 
   const counts = countEvents(sim.events);
@@ -460,11 +476,19 @@ export function writePortfolioJson(outDir: string): number {
       nodePath.join(outDir, 'portfolio.json'),
       JSON.stringify({ ...state, meta: { ...state.meta, readOnly: true } }),
     );
+    writeBacktestJson(outDir);
     return state.equity.length;
   } catch (err) {
     console.error('[portfolio] publishing portfolio.json failed (non-fatal):', err);
     return 0;
   }
+}
+
+export function writeBacktestJson(outDir: string): void {
+  nodeFs.mkdirSync(outDir, { recursive: true });
+  const temporary = nodePath.join(outDir, 'backtest.json.tmp');
+  nodeFs.writeFileSync(temporary, JSON.stringify({ ...getBacktestState(), readOnly: true }));
+  nodeFs.renameSync(temporary, nodePath.join(outDir, 'backtest.json'));
 }
 
 // ── Read model ────────────────────────────────────────────────────────────

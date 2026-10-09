@@ -122,7 +122,7 @@ async function main(): Promise<void> {
   console.log('[scrape-web] starting scrape (sources: ' +
     Object.entries(WEB_SOURCES).filter(([, v]) => v).map(([k]) => k).join(', ') + ')…');
   const started = Date.now();
-  const result = await runScrape({ settings, vix: vix?.value });
+  const result = await runScrape({ settings, vix: vix?.value, vixQuote: vix });
   const secs = Math.round((Date.now() - started) / 1000);
 
   // Notable new WATCH-tier entrants (HIGH is unreachable without options flow, so

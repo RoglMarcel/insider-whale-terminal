@@ -95,6 +95,10 @@ export const mockApi: InsiderTrackerAPI = {
     rebuild: async () => samplePortfolio(),
     setConfig: async () => samplePortfolio(),
   },
+  backtest: {
+    getState: async () => ({ schemaVersion: 1, generatedAt: new Date().toISOString(), records: [], readOnly: true }),
+    retry: async () => { throw new Error('In der Vorschau gibt es keine abgeschlossenen Käufe.'); },
+  },
   performance: {
     getLatest: async () => null,
     recompute: async () => ({

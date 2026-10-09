@@ -17,6 +17,12 @@ export const DESKTOP_PUBLISH_MARKER = '[desktop-publish]';
 
 /** Tables copied to the repo DB, and the key that makes each copy idempotent. */
 const COPIED_TABLES: { table: string; identity: string[] }[] = [
+  { table: 'backtest_decisions', identity: ['key'] },
+  { table: 'backtest_purchases', identity: ['key'] },
+  { table: 'backtest_trades', identity: ['key'] },
+  { table: 'backtest_closures', identity: ['key'] },
+  { table: 'backtest_analyses', identity: ['key'] },
+  { table: 'backtest_replays', identity: ['key'] },
   // The alerts themselves — this is what the web terminal renders.
   { table: 'signals', identity: ['ticker', 'scraped_at'] },
   // Session list behind the web UI's run history + source-health panel.
@@ -110,6 +116,7 @@ function copyTable(
 ): number {
   const targetCols = columnsOf(target, 'main', table);
   const sourceCols = columnsOf(target, 'src', table);
+  if (!sourceCols.length && table.startsWith('backtest_')) return 0; // older desktop export
   if (!targetCols.length || !sourceCols.length) throw new Error(`Missing export table: ${table}`);
   const cols = targetCols.filter((c) => c !== 'id' && sourceCols.includes(c));
   if (!identity.every((c) => cols.includes(c))) throw new Error(`Missing identity columns: ${table}`);

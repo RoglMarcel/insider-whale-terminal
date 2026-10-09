@@ -1,4 +1,7 @@
 import { utcInstantMs } from '../src/lib/utcDate';
+import { BACKTEST_SCHEMA } from './backtestSchema';
+import { captureDecision, recordBacktestBook, recordBacktestClosures, analyzePendingBacktests } from './backtest';
+import type { DecisionContext } from '../src/types/backtest';
 import { sanitizeTradeAmounts } from './scraper/util';
 import { tickerIssue, resolvedTicker } from '../src/lib/ticker-quality';
 import Database from 'better-sqlite3';
@@ -392,7 +395,7 @@ CREATE TABLE IF NOT EXISTS live_news (
   scraped_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );
 CREATE INDEX IF NOT EXISTS idx_live_news_timestamp ON live_news(timestamp);
-` + PORTFOLIO_SCHEMA;
+` + PORTFOLIO_SCHEMA + BACKTEST_SCHEMA;
 
 // ──────────────────────────────────────────────────────────────────────────
 // Migrations — additive, idempotent. SQLite does NOT support
@@ -505,6 +508,7 @@ export function runMigrations(database: Database.Database): void {
   // touch signals / signal_outcomes, which carry ~4,500 irreplaceable labeled
   // rows in the committed history DB.
   database.exec(PORTFOLIO_SCHEMA);
+  database.exec(BACKTEST_SCHEMA);
 }
 
 // ──────────────────────────────────────────────────────────────────────────
@@ -556,10 +560,23 @@ export function initDatabase(dbPath: string, opts?: { readonly?: boolean }): Dat
   } catch (err) {
     console.error('[db] portfolio config migration failed (non-fatal):', err);
   }
+  db.transaction(() => {
+    const config = getPortfolioRunMeta()?.config ?? getPortfolioConfig();
+    const positions = getPortfolioPositions();
+    recordBacktestBook('Hauptdepot', config, positions, true);
+    recordBacktestClosures('Hauptdepot', config, positions);
+    const experiment = getPortfolioExperiment('insider-only-v1');
+    if (experiment?.state.config && Array.isArray(experiment.state.open) && Array.isArray(experiment.state.closed)) {
+      const positions = [...experiment.state.open, ...experiment.state.closed];
+      recordBacktestBook('Insider Only', experiment.state.config, positions, true);
+      recordBacktestClosures('Insider Only', experiment.state.config, positions);
+    }
+  })();
+  analyzePendingBacktests();
   return db;
 }
 
-function getDb(): Database.Database {
+export function getDb(): Database.Database {
   if (!db) throw new Error('Database not initialized — call initDatabase() first.');
   return db;
 }
@@ -690,7 +707,15 @@ function rowToSignal(row: SignalRow): Signal {
 // batch) and re-compiling the SQL per row is pure overhead.
 let insertSignalStmt: Database.Statement | null = null;
 
-export function insertSignal(signal: Signal): number {
+export function insertSignal(signal: Signal, context: DecisionContext | null = null): number {
+  return getDb().transaction(() => {
+    const id = insertSignalRow(signal);
+    captureDecision({ ...signal, id }, context);
+    return id;
+  })();
+}
+
+function insertSignalRow(signal: Signal): number {
   recordTickerQuality(signal.ticker);
   const stmt = (insertSignalStmt ??= getDb().prepare(`
     INSERT INTO signals (
@@ -743,9 +768,9 @@ export function insertSignal(signal: Signal): number {
 }
 
 /** Insert a full batch of signals from one scrape session in a transaction. */
-export function insertSignals(signals: Signal[]): void {
+export function insertSignals(signals: Signal[], contexts: Record<string, DecisionContext> = {}): void {
   const insertMany = getDb().transaction((items: Signal[]) => {
-    for (const s of items) insertSignal(s);
+    for (const s of items) insertSignal(s, contexts[s.ticker] ?? null);
   });
   insertMany(signals);
 }

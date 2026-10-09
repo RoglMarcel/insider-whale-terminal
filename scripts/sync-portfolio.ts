@@ -15,7 +15,7 @@ import path from 'node:path';
 import { recordUpdate } from './update-report';
 import fs from 'node:fs';
 import { initDatabase, closeDatabase } from '../electron/database';
-import { getPortfolioState, rebuildPortfolio, syncPortfolio } from '../electron/portfolio';
+import { getPortfolioState, rebuildPortfolio, syncPortfolio, writeBacktestJson } from '../electron/portfolio';
 
 const pct = (v: number | null | undefined): string =>
   v == null ? 'n/a' : `${v >= 0 ? '+' : ''}${(v * 100).toFixed(2)}%`;
@@ -97,6 +97,7 @@ function publishPortfolio(): number {
   const temporary = path.join(directory, 'portfolio.json.tmp');
   fs.writeFileSync(temporary, JSON.stringify({ ...state, meta: { ...state.meta, readOnly: true } }));
   fs.renameSync(temporary, path.join(directory, 'portfolio.json'));
+  writeBacktestJson(directory);
   return state.equity.length;
 }
 

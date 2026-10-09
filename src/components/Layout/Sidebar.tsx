@@ -27,6 +27,7 @@ const NAV: NavItem[] = [
   { key: 'watchlist', label: 'nav.watchlist', icon: StarIcon },
   { key: 'history', label: 'nav.history', icon: HistoryIcon },
   { key: 'settings', label: 'nav.settings', icon: SettingsIcon },
+  { key: 'backtest', label: 'nav.backtest', icon: HistoryIcon },
 ];
 
 export const VISIBLE_NAV = NAV.filter((n) => !(isWeb && n.desktopOnly));
@@ -73,7 +74,7 @@ export function Sidebar({ open = false, onClose }: { open?: boolean; onClose?: (
       </div>
 
       {/* Nav */}
-      <nav className="flex flex-col gap-1">
+      <nav className="flex flex-1 flex-col gap-1">
         {VISIBLE_NAV.map((item) => {
           const Icon = item.icon;
           const active = view === item.key;
@@ -81,7 +82,7 @@ export function Sidebar({ open = false, onClose }: { open?: boolean; onClose?: (
             <button
               key={item.key}
               aria-current={active ? 'page' : undefined}
-              className={`sidebar-item ${active ? 'sidebar-item-active' : ''}`}
+              className={`sidebar-item ${item.key === 'backtest' ? 'mt-auto' : ''} ${active ? 'sidebar-item-active' : ''}`}
               onClick={() => go(item.key)}
             >
               <Icon size={18} />

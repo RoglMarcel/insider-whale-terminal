@@ -1,5 +1,7 @@
 /** Single source of truth for IPC channel names (imported by main + preload). */
 export const IPC = {
+  backtestGetState: 'backtest:getState',
+  backtestRetry: 'backtest:retry',
   analysisAnalyze: 'analysis:analyze',
   analysisSearch: 'analysis:search',
   scraperStart: 'scraper:start',

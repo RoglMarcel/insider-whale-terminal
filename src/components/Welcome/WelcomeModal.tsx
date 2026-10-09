@@ -129,7 +129,16 @@ const slides: SlideData[] = [
         desc: "Configured the Windows setup wizard to locate and close any background or system tray app instances automatically, allowing updates to install smoothly."
       }
     ]
-  }
+  },
+  {
+    version: '1.7.0',
+    title: 'Version 1.7.0 · Backtest',
+    subtitle: 'Depotentscheidungen nachvollziehbar auswerten',
+    bullets: [
+      { title: 'Unveränderliche Kaufdaten', desc: 'Originale Alert-Daten, Bewertungsinputs und Ausführungsdaten werden dauerhaft archiviert. Historische Lücken sind sichtbar.' },
+      { title: 'Analysen und Export', desc: 'Geschlossene Positionen erhalten versionierte Auswertungen mit belegten Beobachtungen, Grenzen und Optimierungshypothesen. Alle Daten lassen sich als JSON exportieren.' },
+    ],
+  },
 ];
 
 function parseVersionNum(v: string): number {

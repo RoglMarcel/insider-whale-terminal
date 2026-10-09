@@ -63,6 +63,7 @@ jobs:
           node tests/persistence/portfolio-experiment.integration.cjs
           node tests/persistence/trade-revisions.integration.cjs
           node tests/persistence/track-cache.integration.cjs
+          npm run verify:backtest
 
       - uses: actions/setup-python@v5
         with:
@@ -104,9 +105,14 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - name: Public UI on desktop, tablet and phones
         run: node tests/ui/web-ui.cjs
+      - run: npm run build
+      - name: Backtest Web and Desktop UI
+        run: node tests/ui/backtest-ui.cjs
       - uses: actions/upload-artifact@v4
         if: always()
         with:
           name: web-ui-review
-          path: tmp/ui
+          path: |
+            tmp/ui
+            tmp/backtest-ui
           retention-days: 7

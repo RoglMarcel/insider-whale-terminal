@@ -139,6 +139,42 @@ class PersistenceTests(unittest.TestCase):
             self.assertEqual(db.execute('SELECT count(*) FROM signals').fetchone()[0], 2)
             self.assertEqual(db.execute('SELECT value FROM portfolio_equity').fetchone()[0], 12345)
 
+    def test_backtest_evidence_merge_preserves_originals_and_versions(self):
+        incoming = self.root / 'backtest.db'
+        shutil.copyfile(self.db, incoming)
+        with closing(sqlite3.connect(incoming)) as db, db:
+            db.executescript('''
+                CREATE TABLE backtest_decisions(key TEXT PRIMARY KEY, payload TEXT NOT NULL);
+                CREATE TABLE backtest_purchases(key TEXT PRIMARY KEY, portfolio TEXT NOT NULL, portfolio_id TEXT NOT NULL, strategy TEXT NOT NULL, snapshot TEXT NOT NULL);
+                CREATE TABLE backtest_trades(key TEXT PRIMARY KEY, purchase_key TEXT NOT NULL, payload TEXT NOT NULL);
+                CREATE TABLE backtest_closures(key TEXT PRIMARY KEY, purchase_key TEXT NOT NULL, payload TEXT NOT NULL);
+                CREATE TABLE backtest_analyses(key TEXT PRIMARY KEY, purchase_key TEXT NOT NULL, payload TEXT NOT NULL);
+                CREATE TABLE backtest_replays(key TEXT PRIMARY KEY, purchase_key TEXT NOT NULL, payload TEXT NOT NULL);
+                INSERT INTO backtest_decisions VALUES('alert', '{"score":80}');
+                INSERT INTO backtest_purchases VALUES('buy', 'Hauptdepot', 'desktop:main', 'config', '{"original":true}');
+                INSERT INTO backtest_trades VALUES('buy:buy', 'buy', '{"side":"buy"}');
+                INSERT INTO backtest_closures VALUES('buy:close', 'buy', '{"pnl":10}');
+                INSERT INTO backtest_analyses VALUES('version1', 'buy', '{"version":1}');
+                INSERT INTO backtest_analyses VALUES('version2', 'buy', '{"version":2}');
+            ''')
+        history.merge_desktop(self.db, incoming)
+        history.merge_desktop(self.db, incoming)
+        with closing(sqlite3.connect(self.db)) as db:
+            self.assertEqual(db.execute('SELECT count(*) FROM backtest_purchases').fetchone()[0], 1)
+            self.assertEqual(db.execute('SELECT count(*) FROM backtest_analyses').fetchone()[0], 2)
+            original = db.execute('SELECT snapshot FROM backtest_purchases').fetchone()[0]
+        with closing(sqlite3.connect(incoming)) as db, db:
+            db.execute("UPDATE backtest_purchases SET snapshot='changed'")
+        history.merge_desktop(self.db, incoming)
+        with closing(sqlite3.connect(self.db)) as db:
+            self.assertEqual(db.execute('SELECT snapshot FROM backtest_purchases').fetchone()[0], original)
+        self.save()
+        self.db.unlink()
+        history.restore('owner/repo', self.db)
+        with closing(sqlite3.connect(self.db)) as db:
+            self.assertEqual(db.execute('SELECT snapshot FROM backtest_purchases').fetchone()[0], original)
+            self.assertEqual(db.execute('SELECT count(*) FROM backtest_analyses').fetchone()[0], 2)
+
     def test_chunked_desktop_merge_on_scheduled_run_and_corrupt_part_rejected(self):
         self.save()
         incoming = self.root / 'incoming.db'

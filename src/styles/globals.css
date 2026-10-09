@@ -614,6 +614,8 @@ tr {
 .app-shell .glass-card-hover:hover { transform: translateY(-1px); }
 .workspace-view { width: 100%; max-width: 1280px; margin: 0 auto; display: grid; gap: 14px; }
 .workspace-view > *, .workspace-view .glass-card { min-width: 0; }
+.backtest-view label { display: flex; flex-direction: column; gap: 4px; min-width: 0; max-width: 100%; }
+.backtest-view label .input { margin-left: 0; }
 .workspace-view .glass-card { padding: 18px; }
 .settings-view { max-width: 960px; }
 .section-title { font-size: 12px; text-transform: uppercase; letter-spacing: .06em; font-weight: 650; margin-bottom: 8px; }

@@ -1866,6 +1866,10 @@ export interface PortfolioState {
 // ──────────────────────────────────────────────────────────────────────────
 
 export interface InsiderTrackerAPI {
+  backtest: {
+    getState: () => Promise<import('./backtest').BacktestState>;
+    retry: (key: string) => Promise<import('./backtest').BacktestState>;
+  };
   analysis: {
     analyze: (ticker: string) => Promise<import('./analysis').StockAnalysis>;
     search: (query: string) => Promise<import('./analysis').StockSuggestion[]>;
