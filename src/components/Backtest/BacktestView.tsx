@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { api } from '@/lib/ipc';
 import { GlassCard } from '@/components/UI/GlassCard';
+import { normalizeBacktestState } from '@/lib/backtest-records';
 import type { BacktestRecord, BacktestState } from '@/types/backtest';
 
 const pct = (value: number | null | undefined) => value == null ? '—' : `${(value * 100).toFixed(2)}%`;
@@ -14,7 +15,6 @@ export function BacktestView() {
   const [state, setState] = useState<BacktestState | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
-  const [depot, setDepot] = useState('all');
   const [status, setStatus] = useState('closed');
   const [provenance, setProvenance] = useState('all');
   const [search, setSearch] = useState('');
@@ -25,14 +25,13 @@ export function BacktestView() {
   const [analysisId, setAnalysisId] = useState('latest');
   const load = useCallback(async () => {
     setBusy(true); setError('');
-    try { setState(await api.backtest.getState()); }
+    try { setState(normalizeBacktestState(await api.backtest.getState())); }
     catch (e) { setError(e instanceof Error ? e.message : 'Backtest-Daten konnten nicht geladen werden'); }
     finally { setBusy(false); }
   }, []);
   useEffect(() => { void load(); return api.app.onSignalsUpdated(() => void load()); }, [load]);
   const rows = useMemo(() => {
-    const records = (state?.records ?? []).filter(r => (depot === 'all' || r.portfolioId === depot) &&
-      (status === 'all' || status === 'closed' && r.status !== 'open' || r.status === status) &&
+    const records = (state?.records ?? []).filter(r => (status === 'all' || status === 'closed' && r.status !== 'open' || r.status === status) &&
       (provenance === 'all' || r.snapshot.provenance === provenance) &&
       r.position.ticker.toLowerCase().includes(search.toLowerCase()) &&
       (!from || r.position.entryDate >= from) && (!to || r.position.entryDate <= to));
@@ -40,13 +39,13 @@ export function BacktestView() {
     return records.sort((a, b) => sort === 'score' ? b.position.entryScore - a.position.entryScore :
       sort === 'return' ? ret(b) - ret(a) : sort === 'ticker' ? a.position.ticker.localeCompare(b.position.ticker) :
       sort === 'entry' ? b.position.entryDate.localeCompare(a.position.entryDate) : (b.position.exitDate ?? '').localeCompare(a.position.exitDate ?? ''));
-  }, [state, depot, status, provenance, search, from, to, sort]);
+  }, [state, status, provenance, search, from, to, sort]);
   const record = state?.records.find(r => r.key === selected);
   const analysis = analysisId === 'latest' ? record?.analyses.at(-1) : record?.analyses.find(a => a.id === analysisId);
   const retry = async () => {
     if (!record) return;
     setBusy(true); setError('');
-    try { setState(await api.backtest.retry(record.key)); setAnalysisId('latest'); }
+    try { setState(normalizeBacktestState(await api.backtest.retry(record.key))); setAnalysisId('latest'); }
     catch (e) { setError(e instanceof Error ? e.message : 'Analyse fehlgeschlagen'); }
     finally { setBusy(false); }
   };
@@ -59,7 +58,7 @@ export function BacktestView() {
   return <div className="backtest-view workspace-view space-y-4">
     <GlassCard>
       <div className="flex flex-wrap items-center justify-between gap-3"><h2 className="text-xl font-bold">Backtest</h2><div className="flex gap-2"><button className="btn" disabled={busy} onClick={() => void load()}>Aktualisieren</button><button className="btn btn-primary" disabled={!state || busy} onClick={exportJson}>JSON exportieren</button></div></div>
-      <p className="mt-2 text-sm text-secondary">Nachträgliche Untersuchung der tatsächlich im simulierten Depot ausgeführten Entscheidungen. Keine automatische Änderung von Gewichten oder Handelsregeln.</p>
+      <p className="mt-2 text-sm text-secondary">Gekaufte Alerts aus dem Hauptdepot, jeder Kauf einmal archiviert. Keine automatische Änderung von Gewichten oder Handelsregeln.</p>
       <p className="mt-2 text-sm text-secondary">USD-Modell · EUR-Umrechnung und separate Gebühren fehlen. Historische Käufe ohne Original-Snapshot sind von Faktorauswertungen auszuschließen.</p>
       {state?.readOnly && <p className="mt-2 text-sm text-secondary">Veröffentlichte Depotdaten. Erneute Analysen werden nur in diesem Browser gespeichert und im JSON-Export mitgeliefert; sie werden nicht zum Server synchronisiert.</p>}
       {state && <p className="mt-2 text-xs text-secondary">Datenstand: {state.generatedAt || 'unbekannt'} · {state.records.length} Positionen archiviert</p>}
@@ -69,7 +68,6 @@ export function BacktestView() {
     </GlassCard>
     <GlassCard>
       <div className="flex flex-wrap gap-3 text-sm">
-        <label>Depot<select aria-label="Depot" className="input ml-2" value={depot} onChange={e => setDepot(e.target.value)}><option value="all">Alle</option>{[...new Map(state?.records.map(r => [r.portfolioId, r.portfolio])).entries()].map(([id, label]) => <option key={id} value={id}>{label} · {id.slice(0, 8)}</option>)}</select></label>
         <label>Status<select aria-label="Status" className="input ml-2" value={status} onChange={e => setStatus(e.target.value)}><option value="closed">Geschlossene</option><option value="all">Alle</option>{Object.entries(statuses).map(([s, label]) => <option key={s} value={s}>{label}</option>)}</select></label>
         <label>Snapshot<select aria-label="Snapshot" className="input ml-2" value={provenance} onChange={e => setProvenance(e.target.value)}><option value="all">Alle</option><option value="original">Original vorhanden</option><option value="missing">Historisch fehlend</option></select></label>
         <label>Wertpapier<input aria-label="Wertpapier" className="input ml-2" value={search} onChange={e => setSearch(e.target.value)} placeholder="Ticker" /></label>
@@ -103,7 +101,7 @@ export function BacktestView() {
         <JsonDetails title="Strukturierte Einzelbewertungen" data={analysis.factors} />
         <JsonDetails title="Für diese Analyse verwendete Daten" data={analysis.input} />
       </div>}
-      <JsonDetails title="Identitäten und spätere Replay-Abweichungen" data={{ key: record.key, portfolioId: record.portfolioId, strategy: record.strategy, replayChanges: record.replayChanges }} />
+      <JsonDetails title="Identitäten und spätere Replay-Abweichungen" data={{ key: record.key, portfolioId: record.portfolioId, strategy: record.strategy, replayChanges: record.replayChanges, sourceRecords: record.sourceRecords }} />
     </GlassCard>}
   </div>;
 }

@@ -1,3 +1,5 @@
+import { mergePublishedBacktest } from '../src/lib/backtest-records';
+import type { BacktestState } from '../src/types/backtest';
 import { pathToFileURL } from 'node:url';
 import { externalWebUrl, trustedRenderer, requirePlatform } from './securityBoundary';
 import { app, BrowserWindow, ipcMain, shell, Menu, Notification, dialog, globalShortcut } from 'electron';
@@ -254,6 +256,15 @@ function displayedPortfolio() {
   }
   const state = getPortfolioState();
   return hasSharedBook() ? { ...state, meta: { ...state.meta, readOnly: true } } : state;
+}
+
+function displayedBacktest(): BacktestState {
+  const local = getBacktestState();
+  if (hasSharedBook()) {
+    const row = getDb().prepare("SELECT value FROM app_settings WHERE key='shared_backtest_state'").get() as { value: string } | undefined;
+    if (row) return mergePublishedBacktest(JSON.parse(row.value) as BacktestState, local);
+  }
+  return local;
 }
 
 async function pullSharedHistory(): Promise<void> {
@@ -669,14 +680,14 @@ function registerIpc(): void {
   // Testing portfolio. Sync/rebuild talk to Yahoo, so they are async; getState
   // is a pure read and stays cheap enough to call on every tab switch.
   handle(IPC.portfolioGetState, () => displayedPortfolio());
-  handle(IPC.backtestGetState, () => getBacktestState());
+  handle(IPC.backtestGetState, () => displayedBacktest());
   handle(IPC.backtestRetry, (_e, key: string) => {
-    const state = retryBacktest(key);
+    retryBacktest(key);
     if (getSettings().webPublishEnabled) {
       markHistoryPending();
       void publishPendingHistory().catch(console.error);
     }
-    return state;
+    return displayedBacktest();
   });
   handle(IPC.portfolioSync, async () => {
     await pullSharedHistory();

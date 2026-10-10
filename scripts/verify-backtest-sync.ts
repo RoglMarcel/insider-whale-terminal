@@ -18,7 +18,7 @@ async function verify(): Promise<void> {
     upsertPriceRows([{ ticker: 'SPY', date: date(1), adjClose: 500 }, { ticker: 'TEST', date: date(1), adjClose: 100 }]);
     assert.equal((await syncPortfolio()).ok, true);
     let state = getBacktestState();
-    assert.equal(state.records.length, 2);
+    assert.equal(state.records.length, 1);
     assert(state.records.every(r => r.status === 'open' && r.snapshot.provenance === 'original'));
     const originals = new Map(state.records.map(r => [r.key, JSON.stringify(r.snapshot)]));
     // Expire all alert/outcome source rows while the positions are still open.
@@ -26,7 +26,7 @@ async function verify(): Promise<void> {
     upsertPriceRows([{ ticker: 'SPY', date: date(11), adjClose: 525 }, { ticker: 'TEST', date: date(11), adjClose: 110 }]);
     assert.equal((await syncPortfolio()).ok, true);
     state = getBacktestState();
-    assert.equal(state.records.length, 2);
+    assert.equal(state.records.length, 1);
     assert(state.records.every(r => r.status === 'complete' && r.trades.length === 2));
     assert(state.records.every(r => originals.get(r.key) === JSON.stringify(r.snapshot)));
     assert.equal(getPortfolioPositions()[0].entryDate, date(1));
@@ -36,7 +36,7 @@ async function verify(): Promise<void> {
     assert.deepEqual(getBacktestState().records, saved);
     closeDatabase(); initDatabase(path.join(dir, 'sync.db'));
     assert.deepEqual(getBacktestState().records, saved);
-    console.log('Production portfolio sync: both depots buy with snapshots, retain entries after source expiry, close and analyze, repeat without duplicates, and survive restart. No network requests.');
+    console.log('Production portfolio sync: main depot buys once with snapshots, retain entries after source expiry, close and analyze, repeat without duplicates, and survive restart. No network requests.');
   } finally { closeDatabase(); fs.rmSync(dir, { recursive: true, force: true }); }
 }
 verify().catch(error => { console.error(error); process.exitCode = 1; });

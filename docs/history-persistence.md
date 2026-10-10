@@ -117,3 +117,10 @@ remain connected. Compressed, immutable release snapshots avoid the Git blob
 limit. If transport chunking is added later, split a consistent backup into
 bounded chunks with a checksum manifest, and verify/reassemble all chunks before
 opening SQLite. Do not start a blank database when a file hits a size threshold.
+
+
+## Backtest archive, 1.7.3
+
+The public backtest archives Hauptdepot purchases once; comparison portfolios do not add another purchase. Economic duplicates from legacy device identities are coalesced for display, retaining immutable source records and analysis versions. New purchase identities no longer depend on a random device UUID; legacy keys are reused when recording the same purchase.
+
+The shared package carries the published backtest state as well as raw evidence. A synchronized desktop displays the published count and generatedAt, plus local analysis versions for matching purchases. Extra local raw history remains stored and available for future cloud ingestion. Existing historic source snapshots are not reconstructed from newer alerts.

@@ -372,10 +372,8 @@ async function runSync(): Promise<PortfolioSyncReport> {
     replacePortfolioEvents(sim.events);
     recordBacktestBook('Hauptdepot', config, sim.positions);
     recordBacktestClosures('Hauptdepot', config, sim.positions);
-    const positions = [...experiment.state.open, ...experiment.state.closed];
     setPortfolioExperiment(experiment);
-    recordBacktestBook('Insider Only', experiment.state.config, positions);
-    recordBacktestClosures('Insider Only', experiment.state.config, positions);
+    // Comparison depots do not archive a second copy of the purchased alert.
   })();
   analyzePendingBacktests();
   insertPortfolioSuspectEvents(priceSync.suspect);

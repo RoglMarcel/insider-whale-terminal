@@ -1,3 +1,4 @@
+import { normalizeBacktestState, mergeAnalysisVersions } from './backtest-records';
 import type { BacktestState, BacktestAnalysis } from '../types/backtest';
 import { analyzeBacktest } from './backtest-analysis';
 
@@ -8,16 +9,18 @@ function versions(): Versions {
   return raw ? JSON.parse(raw) as Versions : {};
 }
 export function mergeLocalBacktest(state: BacktestState): BacktestState {
+  state = normalizeBacktestState(state);
   let local: Versions;
   try { local = versions(); }
   catch { return { ...state, readOnly: true, localError: 'Lokale Analyseversionen konnten nicht gelesen werden. Die veröffentlichten Originaldaten bleiben verfügbar.' }; }
   return { ...state, readOnly: true, records: state.records.map(r => {
-    const analyses = [...r.analyses, ...(local[r.key] ?? [])].sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const analyses = mergeAnalysisVersions([...r.analyses, ...[r.key, ...(r.sourceRecords ?? []).map(s => s.key)].flatMap(key => local[key] ?? [])]);
     return { ...r, analyses, status: r.status === 'open' ? 'open' : analyses.at(-1)?.status ?? r.status };
   }) };
 }
 /** Static hosting has no write API. Explicitly local versions survive reloads and export. */
 export function retryLocalBacktest(state: BacktestState, key: string): BacktestState {
+  state = normalizeBacktestState(state);
   const r = state.records.find(r => r.key === key);
   if (!r || r.status === 'open') throw new Error('Geschlossene Position nicht gefunden');
   const now = new Date().toISOString();

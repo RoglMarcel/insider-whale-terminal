@@ -12,7 +12,7 @@ export const HISTORY_TABLES: { table: string; identity: string[] }[] = [
   { table: 'portfolio_experiment_candidates', identity: ['experiment_id', 'ticker', 'earliest_date'] },
 ];
 const BOOK_TABLES = ['portfolio_positions', 'portfolio_equity', 'portfolio_events', 'portfolio_experiments'];
-const BOOK_KEYS = ['portfolio_config', 'portfolio_meta', 'portfolio_config_version', 'shared_portfolio_state'];
+const BOOK_KEYS = ['portfolio_config', 'portfolio_meta', 'portfolio_config_version', 'shared_portfolio_state', 'shared_backtest_state'];
 const quote = (name: string) => `"${name.replaceAll('"', '""')}"`;
 function columns(db: Database.Database, schema: string, table: string): string[] {
   return (db.prepare(`PRAGMA ${schema}.table_info(${quote(table)})`).all() as { name: string }[]).map(r => r.name);
@@ -75,7 +75,7 @@ export function mergeSharedHistory(db: Database.Database, source: string, revisi
   } finally { db.exec('DETACH DATABASE incoming'); }
 }
 
-export function exportSharedHistory(source: string, destination: string, publishedPortfolio?: unknown): void {
+export function exportSharedHistory(source: string, destination: string, publishedPortfolio?: unknown, publishedBacktest?: unknown): void {
   const db = new Database(destination);
   try {
     db.exec(SCHEMA);
@@ -91,6 +91,7 @@ export function exportSharedHistory(source: string, destination: string, publish
           if (row) db.prepare('INSERT INTO app_settings(key,value) VALUES(?,?)').run(key, row.value);
         }
         if (publishedPortfolio) db.prepare('INSERT INTO app_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run('shared_portfolio_state', JSON.stringify(publishedPortfolio));
+        if (publishedBacktest) db.prepare('INSERT INTO app_settings(key,value) VALUES(?,?) ON CONFLICT(key) DO UPDATE SET value=excluded.value').run('shared_backtest_state', JSON.stringify(publishedBacktest));
       })();
     } finally { db.exec('DETACH DATABASE incoming'); }
     db.pragma('wal_checkpoint(TRUNCATE)');

@@ -55,6 +55,8 @@ export interface BacktestAnalysis {
   hypotheses: string[];
 }
 export interface BacktestRecord {
+  /** Original immutable copies retained for audit/export after deduplication. */
+  sourceRecords?: BacktestRecord[];
   key: string;
   portfolio: string;
   portfolioId: string;

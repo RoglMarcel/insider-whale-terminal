@@ -68,24 +68,38 @@ try {
   assert.equal(getBacktestState().records[0].position.exitPrice, 110);
   assert.equal(getBacktestState().records[0].replayChanged, true);
   assert.equal(getBacktestState().records[0].replayChanges.length, 1);
-  // Each depot and subsequent entry has a distinct permanent identity.
+  // A comparison depot does not duplicate the alert; a later re-entry remains distinct.
   getDb().transaction(() => { recordBacktestBook('Insider Only', config, [closed]); recordBacktestClosures('Insider Only', config, [closed]); })();
   commit([closed, { ...second, signalId: null }]);
-  assert.equal(getBacktestState().records.length, 3);
+  assert.equal(getBacktestState().records.length, 2);
   assert.equal(getBacktestState().records.find(r => r.position.entryDate === second.entryDate)!.snapshot.provenance, 'missing');
   // Old entries must never acquire a newer source envelope.
   const historical = { ...p, entryDate: '2020-01-01' };
-  recordBacktestBook('Historical', config, [historical]);
-  assert.equal(getBacktestState().records.find(r => r.portfolio === 'Historical')!.snapshot.provenance, 'missing');
+  recordBacktestBook('Hauptdepot', config, [historical]);
+  assert.equal(getBacktestState().records.find(r => r.position.entryDate === '2020-01-01')!.snapshot.provenance, 'missing');
   // Failure is durable, retriable, and cannot prevent a committed close.
   const broken = { ...closed, ticker: 'BROKEN', costBasis: 0 };
-  recordBacktestBook('Failure fixture', config, [broken]); recordBacktestClosures('Failure fixture', config, [broken]); analyzePendingBacktests();
-  assert.equal(getBacktestState().records.find(r => r.portfolio === 'Failure fixture')!.status, 'failed');
+  recordBacktestBook('Hauptdepot', config, [broken]); recordBacktestClosures('Hauptdepot', config, [broken]); analyzePendingBacktests();
+  assert.equal(getBacktestState().records.find(r => r.position.ticker === 'BROKEN')!.status, 'failed');
   const saved = getBacktestState().records;
+  getDb().prepare("UPDATE app_settings SET value='another-device' WHERE key='backtest_instance'").run();
+  commit([closed]);
+  assert.deepEqual(getBacktestState().records, saved, 'device identity changes must not create another purchase');
   clearPortfolio();
   assert.deepEqual(getBacktestState().records, saved);
   closeDatabase(); initDatabase(file);
   assert.deepEqual(getBacktestState().records, saved);
+  // A published key remains retriable even if a local copy sorts before it.
+  const alias = '0'.repeat(64);
+  const db = getDb();
+  db.prepare("INSERT INTO backtest_purchases SELECT ?,portfolio,?,strategy,snapshot FROM backtest_purchases WHERE key=?").run(alias, 'replica:Hauptdepot', key);
+  for (const table of ['backtest_trades','backtest_closures']) {
+    db.prepare(`INSERT INTO ${table} SELECT ? || key,?,payload FROM ${table} WHERE purchase_key=?`).run('replica:',alias,key);
+  }
+  const beforeCopies = getBacktestState().records.length;
+  retryBacktest(key);
+  assert.equal(getBacktestState().records.length, beforeCopies);
+  assert.equal((db.prepare('SELECT count(*) AS n FROM backtest_analyses WHERE purchase_key=?').get(key) as { n:number }).n, 3);
   assert.equal(getDb().pragma('quick_check', { simple: true }), 'ok');
   console.log('Backtest: atomic buys, immutable full snapshots, source changes, closes, retries, depot isolation, re-entry, legacy data, replay drift, failures, reset and SQLite reopen passed.');
 } finally {

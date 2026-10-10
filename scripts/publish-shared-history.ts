@@ -11,7 +11,8 @@ async function main(): Promise<void> {
     // Carry the exact rendered view too: a newer local quote cache must not
     // revalue the cloud's book into different numbers on the desktop.
     const publishedPortfolio = JSON.parse(fs.readFileSync(path.resolve('public/data/portfolio.json'), 'utf8'));
-    exportSharedHistory(path.resolve('data/insider-tracker.db'), file, publishedPortfolio);
+    const publishedBacktest = JSON.parse(fs.readFileSync(path.resolve('public/data/backtest.json'), 'utf8'));
+    exportSharedHistory(path.resolve('data/insider-tracker.db'), file, publishedPortfolio, publishedBacktest);
     const directory = path.resolve('public/data/shared-history');
     await packageDesktopSnapshot(file, directory);
     const manifestFile = path.join(directory, 'manifest.json');

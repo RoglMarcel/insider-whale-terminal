@@ -28,7 +28,8 @@ async function verify(): Promise<void> {
     cloud.prepare('INSERT INTO app_settings VALUES(?,?)').run('portfolio_config', '{"initialCash":1000}');
     const exported = path.join(directory, 'public.db');
     const publishedView = emptyPortfolioState('Exact published portfolio view');
-    exportSharedHistory(cloudPath, exported, publishedView);
+    const publishedBacktest = { schemaVersion: 1, generatedAt: '2026-10-10T12:00:00Z', readOnly: true, records: [] };
+    exportSharedHistory(cloudPath, exported, publishedView, publishedBacktest);
     const transport = new Database(exported, { readonly: true });
     assert.equal(transport.prepare("SELECT 1 FROM app_settings WHERE key='config'").get(), undefined);
     transport.close();
@@ -49,6 +50,7 @@ async function verify(): Promise<void> {
     assert.equal((desktop.prepare("SELECT value FROM app_settings WHERE key='config'").get() as { value: string }).value, '{"private":"local"}');
     assert.equal((desktop.prepare('SELECT COUNT(*) AS n FROM portfolio_revisions').get() as { n: number }).n, 1);
     assert.deepEqual(JSON.parse((desktop.prepare("SELECT value FROM app_settings WHERE key='shared_portfolio_state'").get() as { value: string }).value), publishedView);
+    assert.deepEqual(JSON.parse((desktop.prepare("SELECT value FROM app_settings WHERE key='shared_backtest_state'").get() as { value: string }).value), publishedBacktest);
     // Upload the merged desktop evidence back into the cloud without replacing
     // its simulated book. Each direction must be repeatable independently.
     const outgoing = path.join(directory, 'outgoing.db');

@@ -1,3 +1,4 @@
+import { normalizeBacktestState } from '../src/lib/backtest-records';
 import { createHash, randomUUID } from 'node:crypto';
 import type { Signal, PortfolioConfig, PortfolioPosition } from '../src/types';
 import * as parameters from '../src/types';
@@ -23,7 +24,14 @@ export function backtestInstance(): string {
   db.prepare('INSERT OR IGNORE INTO app_settings (key,value) VALUES (?,?)').run('backtest_instance', randomUUID());
   return (db.prepare('SELECT value FROM app_settings WHERE key=?').get('backtest_instance') as { value: string }).value;
 }
-export const purchaseKey = (portfolio: string, config: PortfolioConfig, p: PortfolioPosition): string => hash([backtestInstance(), portfolio, strategyKey(config), p.ticker, p.entryDate]);
+export function purchaseKey(portfolio: string, config: PortfolioConfig, p: PortfolioPosition): string {
+  const strategy = strategyKey(config);
+  // Reuse existing immutable keys, including those imported from another device.
+  const prior = getDb().prepare(`SELECT key FROM backtest_purchases WHERE portfolio=? AND strategy=?
+    AND json_extract(snapshot,'$.execution.ticker')=? AND json_extract(snapshot,'$.execution.entryDate')=?
+    ORDER BY (json_extract(snapshot,'$.provenance')='original') DESC, key LIMIT 1`).get(portfolio, strategy, p.ticker, p.entryDate) as { key: string } | undefined;
+  return prior?.key ?? hash([portfolio, strategy, p.ticker, p.entryDate, p.entryPrice, p.shares, p.costBasis, p.entryScore, p.targetWeight, p.spyEntry]);
+}
 
 /** Called inside signal insertion's transaction, before any rolling pruning. */
 export function captureDecision(signal: Signal, context: DecisionContext | null = null): void {
@@ -53,6 +61,7 @@ function lookupDecision(p: PortfolioPosition): DecisionEnvelope | null {
 
 /** Must be in the SAME transaction as the successful book write. No analysis here. */
 export function recordBacktestBook(portfolio: string, config: PortfolioConfig, positions: readonly PortfolioPosition[], legacy = false): void {
+  if (portfolio !== 'Hauptdepot') return;
   const db = getDb();
   const now = new Date().toISOString();
   for (const p of positions) {
@@ -89,7 +98,7 @@ export function getBacktestState(): BacktestState {
   const db = getDb();
   const rows = db.prepare('SELECT * FROM backtest_purchases ORDER BY rowid DESC').all() as { key: string; portfolio: string; portfolio_id: string; strategy: string; snapshot: string }[];
   const decode = <T>(table: string, key: string): T[] => (db.prepare(`SELECT payload FROM ${table} WHERE purchase_key=? ORDER BY rowid`).all(key) as { payload: string }[]).map(r => JSON.parse(r.payload));
-  return { schemaVersion: 1, generatedAt: new Date().toISOString(), readOnly: false, records: rows.map(r => {
+  return normalizeBacktestState({ schemaVersion: 1, generatedAt: new Date().toISOString(), readOnly: false, records: rows.map(r => {
     const snapshot = JSON.parse(r.snapshot) as BacktestSnapshot;
     const trades = decode<BacktestTrade>('backtest_trades', r.key);
     const analyses = decode<BacktestAnalysis>('backtest_analyses', r.key).sort((a, b) => a.createdAt.localeCompare(b.createdAt));
@@ -103,10 +112,11 @@ export function getBacktestState(): BacktestState {
       status: !sell ? 'open' : latest?.status ?? 'pending',
       replayChanges: decode<BacktestRecord['replayChanges'][number]>('backtest_replays', r.key),
       replayChanged: !!db.prepare('SELECT key FROM backtest_replays WHERE purchase_key=? LIMIT 1').get(r.key) } as BacktestRecord;
-  }) };
+  }) });
 }
 
 export function recordBacktestClosures(portfolio: string, config: PortfolioConfig, positions: readonly PortfolioPosition[]): void {
+  if (portfolio !== 'Hauptdepot') return;
   for (const p of positions.filter(p => p.exitDate)) {
     const key = purchaseKey(portfolio, config, p);
     getDb().prepare('INSERT OR IGNORE INTO backtest_closures VALUES (?, ?, ?)').run(`${key}:close`, key, JSON.stringify(p));
@@ -116,7 +126,8 @@ export function recordBacktestClosures(portfolio: string, config: PortfolioConfi
 /** Persist failures as analysis versions. A failed analyzer never rolls back a trade. */
 export function retryBacktest(key: string): BacktestState {
   if (typeof key !== 'string' || !/^[a-f0-9]{64}$/.test(key)) throw new Error('Ungültige Position');
-  const r = getBacktestState().records.find(r => r.key === key);
+  const group = getBacktestState().records.find(r => r.key === key || r.sourceRecords?.some(s => s.key === key));
+  const r = group?.sourceRecords?.find(s => s.key === key) ?? group;
   if (!r || r.status === 'open') throw new Error('Geschlossene Position nicht gefunden');
   const id = randomUUID();
   const now = new Date().toISOString();
