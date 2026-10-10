@@ -5,7 +5,7 @@ import { createHash } from 'node:crypto';
 import { createGunzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { getDb } from './database';
-import { mergeSharedHistory } from './sharedHistory';
+import { runHistoryWorker } from './historyBackground';
 import { SNAPSHOT_CHUNK_BYTES } from './desktopSnapshot';
 
 const BASE = 'https://roglmarcel.github.io/insider-whale-web/data/shared-history/';
@@ -51,7 +51,7 @@ async function download(): Promise<WebSyncResult> {
     if (hash.digest('hex') !== manifest.sha256) throw new Error('Web history checksum mismatch');
     const source = path.join(temp, 'history.db');
     await pipeline(fs.createReadStream(archive), createGunzip(), fs.createWriteStream(source));
-    const copied = mergeSharedHistory(getDb(), source, revision);
+    const copied = await runHistoryWorker<Record<string, number>>({ operation: 'import', databasePath: getDb().name, source, revision });
     return { ok: true, changed: true, copied };
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };

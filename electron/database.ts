@@ -796,13 +796,13 @@ export function getLatestSignals(): Signal[] {
       SELECT s.* FROM signals s
       JOIN (
         SELECT id, ROW_NUMBER() OVER (PARTITION BY ticker ORDER BY scraped_at DESC, id DESC) AS rn
-        FROM signals
+        FROM signals WHERE scraped_at >= ?
       ) latest ON s.id = latest.id AND latest.rn = 1
       WHERE s.scraped_at >= ?
       ORDER BY s.score DESC
     `,
     )
-    .all(cutoff) as SignalRow[];
+    .all(cutoff, cutoff) as SignalRow[];
   const active = new Map<string, Signal>();
   for (const signal of rows.map(rowToSignal).filter((r) => !tickerIssue(r.ticker))) {
     const ticker = resolvedTicker(signal.ticker, signal.scrapedAt.slice(0, 10));

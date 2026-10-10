@@ -55,7 +55,7 @@ import { computePerformanceReport } from './performance';
 import { getPortfolioState, rebuildPortfolio, syncPortfolio, updatePortfolioConfig } from './portfolio';
 import { getBacktestState, retryBacktest } from './backtest';
 import { runScrape, getScrapeStatus, fetchStockAnalysisEarnings } from './scraper';
-import { publishToWeb } from './webPublish';
+import { publishHistoryInBackground } from './historyBackground';
 import { syncFromWeb } from './webSync';
 import { launchBrowser, createContext } from './scraper/browser';
 import { yahooTicker } from './scraper/util';
@@ -276,7 +276,7 @@ async function publishPendingHistory(): Promise<void> {
   const pending = db.prepare("SELECT value FROM app_settings WHERE key = 'web_publish_pending'").get() as { value: string } | undefined;
   const bootstrapped = db.prepare("SELECT 1 FROM app_settings WHERE key = 'web_publish_bootstrapped'").get();
   if (!pending && bootstrapped) return;
-  const result = await publishToWeb({ repoPath: settings.webPublishRepoPath || undefined });
+  const result = await publishHistoryInBackground({ repoPath: settings.webPublishRepoPath || undefined });
   broadcast(IPC.webPublishStatus, result);
   if (result.ok && result.pushed) {
     db.prepare("INSERT OR IGNORE INTO app_settings(key,value) VALUES('web_publish_bootstrapped','1')").run();

@@ -10,7 +10,7 @@ export default defineConfig({
     electron({
       // Main process entry — bundled to dist-electron/main.js (CommonJS).
       main: {
-        entry: 'electron/main.ts',
+        entry: ['electron/main.ts', 'electron/sharedHistoryWorker.ts'],
         vite: {
           build: {
             outDir: 'dist-electron',

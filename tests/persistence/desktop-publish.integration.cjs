@@ -52,7 +52,12 @@ INSERT INTO private_payload VALUES(zeroblob(106000000));
 c.commit();c.close()`, source]);
   assert(fs.statSync(source).size > 100 * 1024 * 1024);
   assertLocalRemote();
-  const result = await publishToWeb({ repoPath: repo, sourceDbPathForTest: source, sinceIso: '2026-01-01' });
+  let responsiveTicks = 0;
+  const heartbeat = setInterval(() => responsiveTicks++, 1);
+  let result;
+  try { result = await publishToWeb({ repoPath: repo, sourceDbPathForTest: source, sinceIso: '2026-01-01' }); }
+  finally { clearInterval(heartbeat); }
+  assert(responsiveTicks > 0, 'Git publication must not block the event loop');
   assert.equal(result.ok, true, result.error);
   assert.equal(result.pushed, true);
   assert.equal(result.copied.signals, 1);

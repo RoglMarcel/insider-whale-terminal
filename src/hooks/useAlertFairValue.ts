@@ -1,5 +1,5 @@
 import { useEffect,useState } from 'react';
-import { api } from '@/lib/ipc';
+import { api, isWeb } from '@/lib/ipc';
 import { useStore } from '@/store/useStore';
 import type { FairValueResult } from '@/types/fairValue';
 import { upgradeFairValue } from '@/lib/fairValueDisplay';
@@ -11,11 +11,12 @@ let running=0;
 const queue:(()=>void)[]=[];
 export function invalidateAlertFairValues(){full.clear();summaries.clear();}
 async function summary(){
+  if(!isWeb)return {}; // Desktop cards use saved evidence; full analysis is explicit.
   return summaries.get('all',async()=>{
     const r=await fetch(`${import.meta.env.BASE_URL}data/analysis-summary.json`,{cache:'no-cache',signal:AbortSignal.timeout(8000)});
     if(!r.ok)throw new Error('Summary unavailable');
     const d=await r.json();if(!d.stocks||typeof d.stocks!=='object'||Array.isArray(d.stocks))throw new Error('Invalid summary');
-    return Object.fromEntries(Object.entries(d.stocks).filter(([t,v])=>/^[A-Z0-9][A-Z0-9.-]{0,19}$/.test(t)&&v&&typeof v==='object').map(([t,v])=>[t,upgradeFairValue(v as FairValueResult)]));
+    return Object.fromEntries(Object.entries(d.stocks).filter(([t,v])=>/^[A-Z0-9][A-Z0-9.-]{0,19}$/.test(t)&&v&&typeof v==='object')) as Record<string,FairValueResult>;
   });
 }
 async function retrieve(ticker:string){
@@ -41,7 +42,7 @@ export function useAlertFairValue(ticker:string,recorded?:FairValueResult,detail
       try{snapshot=(await summary())[ticker];}catch{/* full route stays retryable */}
       const newer=(v:FairValueResult)=>!recorded?.fairValue||Date.parse(v.calculatedAt)>=Date.parse(recorded.calculatedAt);
       if(active&&snapshot?.fairValue!=null&&newer(snapshot))setValue(upgradeFairValue(snapshot));
-      if(details||!snapshot||snapshot.fairValue==null){
+      if(details&&active){
         try{const fetched=await retrieve(ticker);if(active&&(fetched.fairValue!=null||!snapshot)&&newer(fetched))setValue(upgradeFairValue(fetched));}catch{/* preserve explained recorded data */}
       }
       if(active)setLoading(false);

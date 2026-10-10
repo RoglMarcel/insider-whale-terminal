@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { isWeb } from '@/lib/ipc';
 import type { Signal } from '@/types';
 import { SignalCard } from './SignalCard';
@@ -11,7 +12,9 @@ export function SignalGrid({ signals, hasSearchQuery }: { signals: Signal[]; has
   const { scrapeStatus, refresh } = useSignals();
   const initialized = useStore((s) => s.initialized);
   const totalSignals = useStore((s) => s.signals.length);
-  const { t } = useI18n();
+  const { t, language } = useI18n();
+  const [visibleCount, setVisibleCount] = useState(24);
+  useEffect(() => setVisibleCount(24), [signals]);
 
   if (!initialized) return <GlassCard className="empty-state text-secondary">{t('common.loading')}</GlassCard>;
   if (isWeb && totalSignals === 0 && scrapeStatus.error?.includes('signals.json')) {
@@ -53,10 +56,15 @@ export function SignalGrid({ signals, hasSearchQuery }: { signals: Signal[]; has
   }
 
   return (
+    <>
     <div className="signal-grid grid auto-rows-fr grid-cols-1 items-stretch gap-4 md:grid-cols-2 xl:grid-cols-3">
-      {signals.map((signal) => (
+      {signals.slice(0, visibleCount).map((signal) => (
         <SignalCard key={signal.ticker} signal={signal} />
       ))}
     </div>
+    {visibleCount < signals.length && <button className="btn mt-4" onClick={() => setVisibleCount(n => n + 24)}>
+      {language === 'de' ? 'Weitere Alerts anzeigen' : 'Show more alerts'} ({visibleCount} / {signals.length})
+    </button>}
+    </>
   );
 }

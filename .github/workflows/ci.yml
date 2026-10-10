@@ -64,6 +64,7 @@ jobs:
           node tests/persistence/trade-revisions.integration.cjs
           node tests/persistence/track-cache.integration.cjs
           npm run verify:backtest
+          npx esbuild electron/sharedHistoryWorker.ts --bundle --platform=node --format=cjs --external:better-sqlite3 --alias:electron=./scripts/electron-stub.ts --outfile=tmp/sharedHistoryWorker.js
           npx esbuild scripts/verify-shared-history.ts --bundle --platform=node --format=cjs --external:better-sqlite3 --alias:electron=./scripts/electron-stub.ts --outfile=tmp/verify-shared-history.cjs
           node scripts/run-node-or-electron.cjs tmp/verify-shared-history.cjs
 

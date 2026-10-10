@@ -44,7 +44,17 @@ function readStatus(): ScrapeStatus {
   return { running: false, phase: error ? 'Data fetch failed' : 'idle', completedSources: [], totalSources: 0, signalsFound: signalsCache?.data.length ?? 0, error };
 }
 function publishReadStatus(): void { for (const listener of statusListeners) listener(readStatus()); }
+// Startup consumers share the same download and JSON parse.
+const pendingJson = new Map<string, Promise<unknown>>();
 async function loadJson<T>(file: string, fallback: T, optional = false): Promise<T> {
+  const pending = pendingJson.get(file);
+  if (pending) return pending as Promise<T>;
+  const task = fetchJson(file, fallback, optional);
+  pendingJson.set(file, task);
+  try { return await task; }
+  finally { if (pendingJson.get(file) === task) pendingJson.delete(file); }
+}
+async function fetchJson<T>(file: string, fallback: T, optional = false): Promise<T> {
   try {
     const res = await fetch(`${DATA_BASE}${file}`, { cache: 'no-store' });
     if (optional && res.status === 404) { readErrors.delete(file); publishReadStatus(); return fallback; }

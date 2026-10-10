@@ -2,7 +2,9 @@ import Database from 'better-sqlite3';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { execFileSync } from 'node:child_process';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+const execGit = promisify(execFile);
 import { packageDesktopSnapshot, unpackDesktopSnapshot, DESKTOP_SNAPSHOT_PATH } from './desktopSnapshot';
 import { SCHEMA, runMigrations, snapshotDatabase } from './database';
 import { HISTORY_TABLES, mergeSharedHistory } from './sharedHistory';
@@ -49,13 +51,14 @@ export interface WebPublishResult {
 // and two concurrent git pushes on one checkout corrupt each other's index.
 let publishInFlight = false;
 
-function git(repo: string, args: string[]): string {
-  try { return execFileSync('git', args, {
+async function git(repo: string, args: string[]): Promise<string> {
+  try { return (await execGit('git', args, {
     cwd: repo,
     timeout: GIT_TIMEOUT_MS,
     encoding: 'utf8',
-    stdio: ['ignore', 'pipe', 'pipe'],
-  }); } catch {
+    windowsHide: true,
+    maxBuffer: 8 * 1024 * 1024,
+  })).stdout; } catch {
     // Git stderr can include credential-bearing remote URLs. Never send it to
     // the renderer or logs; the operation is enough to diagnose the failure.
     throw new Error(`Web publication: git ${args[0]} failed. Check repository access and Git credentials.`);
@@ -189,11 +192,11 @@ export async function publishToWeb(opts: PublishOptions = {}): Promise<WebPublis
     // downloaded source ZIP over an old checkout is not a mergeable branch.
     // Publish from a disposable clone, preserving every local file and index.
     if (opts.push !== false) {
-      const remote = git(sourceRepo, ['remote', 'get-url', '--push', 'origin']).trim();
+      const remote = (await git(sourceRepo, ['remote', 'get-url', '--push', 'origin'])).trim();
       repo = path.join(tmpDir, 'delivery');
-      git(sourceRepo, ['clone', '--quiet', '--depth', '1', '--branch', 'main', '--', remote, repo]);
+      await git(sourceRepo, ['clone', '--quiet', '--depth', '1', '--branch', 'main', '--', remote, repo]);
       for (const key of ['user.name', 'user.email']) {
-        git(repo, ['config', key, git(sourceRepo, ['config', '--get', key]).trim()]);
+        await git(repo, ['config', key, (await git(sourceRepo, ['config', '--get', key])).trim()]);
       }
     }
 
@@ -246,22 +249,22 @@ export async function publishToWeb(opts: PublishOptions = {}): Promise<WebPublis
     }
 
     const DB_PATHSPEC = DESKTOP_SNAPSHOT_PATH;
-    git(repo, ['add', '-f', '--all', '--', DB_PATHSPEC]);
-    if (!git(repo, ['diff', '--cached', '--name-only', '--', DB_PATHSPEC]).trim()) {
+    await git(repo, ['add', '-f', '--all', '--', DB_PATHSPEC]);
+    if (!(await git(repo, ['diff', '--cached', '--name-only', '--', DB_PATHSPEC])).trim()) {
       return { ok: true, copied, pushed: true, skipped: 'snapshot unchanged — remote synchronized' };
     }
-    git(repo, ['add', '-f', DB_PATHSPEC]);
+    await git(repo, ['add', '-f', DB_PATHSPEC]);
     // Pathspec-limited commit. This runs unattended after every scrape, so it
     // must capture ONLY the generated package — committing whatever else happened to be
     // staged would sweep unrelated work-in-progress into an automated push.
-    git(repo, [
+    await git(repo, [
       'commit',
       '-m',
       `chore(data): desktop publish (${signalsCopied} signal(s)) ${DESKTOP_PUBLISH_MARKER}`,
       '--',
       DB_PATHSPEC,
     ]);
-    git(repo, ['push', 'origin', 'HEAD:main']);
+    await git(repo, ['push', 'origin', 'HEAD:main']);
     console.log(`[web-publish] pushed ${signalsCopied} signal(s) — the site will redeploy.`);
     return { ok: true, copied, pushed: true };
   } catch (err) {

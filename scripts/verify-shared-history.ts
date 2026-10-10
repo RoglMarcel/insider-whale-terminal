@@ -1,3 +1,4 @@
+import { publishHistoryInBackground } from '../electron/historyBackground';
 import assert from 'node:assert/strict';
 import Database from 'better-sqlite3';
 import fs from 'node:fs';
@@ -83,13 +84,25 @@ async function verify(): Promise<void> {
     assert.equal((await syncFromWeb()).ok, false);
     assert.equal((desktop.prepare("SELECT value FROM app_settings WHERE key='web_sync_revision'").get() as { value: string }).value, revision);
     corrupt = false;
+    let responsiveTicks = 0;
+    const heartbeat = setInterval(() => responsiveTicks++, 1);
     const first = syncFromWeb(); const second = syncFromWeb();
     assert.equal(first, second, 'concurrent requests must coalesce');
-    assert.equal((await first).ok, true);
+    try { assert.equal((await first).ok, true); } finally { clearInterval(heartbeat); }
+    assert.ok(responsiveTicks > 0, 'history import must leave the event loop responsive');
     const before = calls;
     assert.equal((await syncFromWeb()).changed, false);
     assert.equal(calls - before, 1, 'unchanged revision only fetches manifest');
     assert.equal((desktop.prepare('SELECT COUNT(*) AS n FROM signals').get() as { n: number }).n, 2);
+    const fixtureRepo = path.join(directory, 'local-export');
+    fs.mkdirSync(path.join(fixtureRepo, '.git'), { recursive: true });
+    fs.writeFileSync(path.join(fixtureRepo, 'package.json'), '{}');
+    const publication = publishHistoryInBackground({ repoPath: fixtureRepo, push: false });
+    assert.equal(publication, publishHistoryInBackground({ repoPath: fixtureRepo, push: false }), 'background publications coalesce');
+    const exportedResult = await publication;
+    assert.equal(exportedResult.ok, true, exportedResult.error);
+    assert.equal(exportedResult.pushed, false, 'worker fixture never pushes externally');
+    assert.equal(exportedResult.copied?.signals, 2);
     console.log('Shared history verified: bidirectional evidence, no duplicates, private settings excluded, canonical book archived, newer prices, stale revisions, atomic rollback, corrupt download rejection and concurrent imports.');
   } finally {
     globalThis.fetch = originalFetch; cloud?.close(); closeDatabase();
