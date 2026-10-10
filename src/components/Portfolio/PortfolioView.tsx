@@ -126,13 +126,16 @@ export function PortfolioView() {
 
   useEffect(() => {
     let active = true;
-    api.portfolio
+    const load = () => api.portfolio
       .getState()
       .then((s) => active && setState(s))
       .catch((e) => active && setError(e instanceof Error ? e.message : String(e)))
       .finally(() => active && setLoading(false));
+    void load();
+    const unsubscribe = api.app.onSignalsUpdated(() => { void load(); });
     return () => {
       active = false;
+      unsubscribe();
     };
   }, []);
 

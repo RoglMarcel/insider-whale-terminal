@@ -30,6 +30,9 @@ DESKTOP_TABLES = {
     'signals': ['ticker', 'scraped_at'],
     'scrape_log': ['started_at'],
     'insider_trades': ['ticker', 'insider_key', 'trade_date', 'value_cents'],
+    'signal_outcomes': ['ticker', 'entry_date', 'horizon'],
+    'price_history': ['ticker', 'date'],
+    'portfolio_experiment_candidates': ['experiment_id', 'ticker', 'earliest_date'],
 }
 
 
@@ -114,8 +117,14 @@ def merge_desktop(target, incoming):
         for table, identity in DESKTOP_TABLES.items():
             columns = [r[1] for r in db.execute(f'PRAGMA main.table_info("{table}")')]
             source = [r[1] for r in db.execute(f'PRAGMA desktop.table_info("{table}")')]
-            if not source and table.startswith('backtest_'):
+            if not source:
                 continue
+            if not columns and table in ('signal_outcomes', 'price_history', 'portfolio_experiment_candidates'):
+                # A release from an older app is migrated by the Node runner;
+                # retain the incoming table's schema so its evidence survives.
+                schema = db.execute("SELECT sql FROM desktop.sqlite_master WHERE type='table' AND name=?", (table,)).fetchone()[0]
+                db.execute(schema)
+                columns = [r[1] for r in db.execute(f'PRAGMA main.table_info("{table}")')]
             cols = [c for c in columns if c != 'id' and c in source]
             if not all(c in cols for c in identity):
                 raise RuntimeError(f'Cannot safely merge desktop table {table}')
@@ -124,7 +133,12 @@ def merge_desktop(target, incoming):
             match = ' AND '.join(f't."{c}" IS s."{c}"' for c in identity)
             db.execute(f'INSERT INTO main."{table}" ({names}) '
                        f'SELECT {values} FROM desktop."{table}" s WHERE NOT EXISTS '
-                       f'(SELECT 1 FROM main."{table}" t WHERE {match})')
+                       f'(SELECT 1 FROM main."{table}" t WHERE {match}) '
+                       'GROUP BY ' + ','.join(f's."{c}"' for c in identity))
+            if table == 'price_history' and 'fetched_at' in cols:
+                db.execute('''UPDATE price_history AS t SET adj_close=s.adj_close, fetched_at=s.fetched_at
+                    FROM desktop.price_history AS s WHERE t.ticker=s.ticker AND t.date=s.date
+                    AND julianday(s.fetched_at)>COALESCE(julianday(t.fetched_at),0) AND s.adj_close>0''')
         db.commit()
 
 

@@ -16,11 +16,13 @@ import type {
   AlertRule,
   ScoringConfig,
   PortfolioConfig,
+  PortfolioState,
 } from '../src/types';
 import { CONVICTION_THRESHOLDS } from '../src/types';
 import { IPC } from './ipc-channels';
 import {
   initDatabase,
+  getDb,
   closeDatabase,
   getLatestSignals,
   getSignalByTicker,
@@ -54,6 +56,7 @@ import { getPortfolioState, rebuildPortfolio, syncPortfolio, updatePortfolioConf
 import { getBacktestState, retryBacktest } from './backtest';
 import { runScrape, getScrapeStatus, fetchStockAnalysisEarnings } from './scraper';
 import { publishToWeb } from './webPublish';
+import { syncFromWeb } from './webSync';
 import { launchBrowser, createContext } from './scraper/browser';
 import { yahooTicker } from './scraper/util';
 import { scrapeFinvizEarnings } from './scraper/finviz';
@@ -187,6 +190,7 @@ async function withPooledBrowser<T>(fn: (browser: Browser) => Promise<T>): Promi
 
 async function triggerScrape(): Promise<ScrapeResult> {
   const settings = getSettings();
+  await pullSharedHistory();
   const vixQuote = getCachedVix();
   const result = await runScrape({
     settings,
@@ -218,39 +222,66 @@ async function triggerScrape(): Promise<ScrapeResult> {
   // Roll the testing portfolio forward. Deliberately NOT awaited into the
   // scrape's result: it talks to Yahoo, and a scrape that already succeeded
   // must never be reported as failed because a price fetch timed out.
-  const portfolioSync = syncPortfolio()
+  const portfolioSync = (settings.webPublishEnabled ? Promise.resolve(null) : syncPortfolio())
     .then((r) => {
-      if (r.ok) console.log(`[main] portfolio: +${r.daysWritten} day(s), ${r.pricesFetched} series fetched`);
-      else console.log(`[main] portfolio not run: ${r.reason}`);
+      if (r?.ok) console.log(`[main] portfolio: +${r.daysWritten} day(s), ${r.pricesFetched} series fetched`);
+      else if (r) console.log(`[main] portfolio not run: ${r.reason}`);
       broadcast(IPC.appSignalsUpdated, getLatestSignals());
     })
     .catch((err) => console.error('[main] portfolio sync threw (non-fatal):', err));
 
-  // Push the run to the web terminal. Deliberately NOT awaited into the scrape's
-  // own result: publishing talks to git and the network, and a scrape that
-  // already succeeded locally must not be reported as failed because a push did
-  // not land. Errors are surfaced to the UI instead.
+  // Finish delivery before a scheduled process exits. A publication failure
+  // remains non-fatal and leaves a durable pending flag for the next retry.
   if (settings.webPublishEnabled) {
-    void portfolioSync.then(() => publishToWeb({ repoPath: settings.webPublishRepoPath || undefined }))
-      .then((res) => {
-        if (res.pushed) {
-          console.log('[main] web publish: pushed', res.copied);
-        } else if (res.skipped) {
-          console.log(`[main] web publish skipped: ${res.skipped}`);
-        } else if (res.error) {
-          console.error(`[main] web publish failed: ${res.error}`);
-        }
-        broadcast(IPC.webPublishStatus, res);
-      })
-      .catch((err) => {
-        console.error('[main] web publish threw:', err);
-        broadcast(IPC.webPublishStatus, {
-          ok: false,
-          error: err instanceof Error ? err.message : String(err),
-        });
-      });
+    markHistoryPending();
+    await portfolioSync;
+    await publishPendingHistory();
   }
   return result;
+}
+
+function hasSharedBook(): boolean {
+  return getSettings().webPublishEnabled && !!getDb().prepare("SELECT 1 FROM app_settings WHERE key = 'web_sync_revision'").get();
+}
+
+function displayedPortfolio() {
+  if (hasSharedBook()) {
+    const published = getDb().prepare("SELECT value FROM app_settings WHERE key = 'shared_portfolio_state'").get() as { value: string } | undefined;
+    if (published) {
+      const state = JSON.parse(published.value) as PortfolioState;
+      return { ...state, meta: { ...state.meta, readOnly: true } };
+    }
+  }
+  const state = getPortfolioState();
+  return hasSharedBook() ? { ...state, meta: { ...state.meta, readOnly: true } } : state;
+}
+
+async function pullSharedHistory(): Promise<void> {
+  if (!getSettings().webPublishEnabled) return;
+  const result = await syncFromWeb();
+  if (result.changed) broadcast(IPC.appSignalsUpdated, getLatestSignals());
+  if (!result.ok) broadcast(IPC.webPublishStatus, result);
+}
+
+let webSyncTimer: ReturnType<typeof setInterval> | undefined;
+
+function markHistoryPending(): void {
+  getDb().prepare("INSERT INTO app_settings(key,value) VALUES('web_publish_pending',?) ON CONFLICT(key) DO UPDATE SET value=excluded.value").run(new Date().toISOString());
+}
+
+async function publishPendingHistory(): Promise<void> {
+  const settings = getSettings();
+  if (!settings.webPublishEnabled) return;
+  const db = getDb();
+  const pending = db.prepare("SELECT value FROM app_settings WHERE key = 'web_publish_pending'").get() as { value: string } | undefined;
+  const bootstrapped = db.prepare("SELECT 1 FROM app_settings WHERE key = 'web_publish_bootstrapped'").get();
+  if (!pending && bootstrapped) return;
+  const result = await publishToWeb({ repoPath: settings.webPublishRepoPath || undefined });
+  broadcast(IPC.webPublishStatus, result);
+  if (result.ok && result.pushed) {
+    db.prepare("INSERT OR IGNORE INTO app_settings(key,value) VALUES('web_publish_bootstrapped','1')").run();
+    if (pending) db.prepare("DELETE FROM app_settings WHERE key = 'web_publish_pending' AND value = ?").run(pending.value);
+  }
 }
 
 async function fetchTrackRecord(
@@ -637,18 +668,28 @@ function registerIpc(): void {
   });
   // Testing portfolio. Sync/rebuild talk to Yahoo, so they are async; getState
   // is a pure read and stays cheap enough to call on every tab switch.
-  handle(IPC.portfolioGetState, () => getPortfolioState());
+  handle(IPC.portfolioGetState, () => displayedPortfolio());
   handle(IPC.backtestGetState, () => getBacktestState());
-  handle(IPC.backtestRetry, (_e, key: string) => retryBacktest(key));
+  handle(IPC.backtestRetry, (_e, key: string) => {
+    const state = retryBacktest(key);
+    if (getSettings().webPublishEnabled) {
+      markHistoryPending();
+      void publishPendingHistory().catch(console.error);
+    }
+    return state;
+  });
   handle(IPC.portfolioSync, async () => {
-    await syncPortfolio();
-    return getPortfolioState();
+    await pullSharedHistory();
+    if (!getSettings().webPublishEnabled) await syncPortfolio();
+    return displayedPortfolio();
   });
   handle(IPC.portfolioRebuild, async () => {
+    if (hasSharedBook()) throw new Error('Das gemeinsame Depot wird im Web berechnet. Für ein eigenes lokales Depot zuerst den Web-Abgleich deaktivieren.');
     await rebuildPortfolio();
     return getPortfolioState();
   });
   handle(IPC.portfolioSetConfig, async (_e, config: Partial<PortfolioConfig>) => {
+    if (hasSharedBook()) throw new Error('Das gemeinsame Depot verwendet die veröffentlichten Regeln. Für eigene lokale Regeln zuerst den Web-Abgleich deaktivieren.');
     await updatePortfolioConfig(config);
     return getPortfolioState();
   });
@@ -817,6 +858,10 @@ if (!singleInstance) {
     } else {
       cleanupTestTask();
       createWindow();
+      void pullSharedHistory().then(() => publishPendingHistory()).catch(console.error);
+      webSyncTimer = setInterval(() => {
+        if (!getScrapeStatus().running) void pullSharedHistory().then(() => publishPendingHistory()).catch(console.error);
+      }, 60_000);
       initAutoUpdater();
 
       // Global shortcut to toggle DevTools at any time (windowed mode only).
@@ -842,6 +887,7 @@ if (!singleInstance) {
 
   app.on('window-all-closed', () => {
     if (process.platform !== 'darwin') {
+      clearInterval(webSyncTimer);
       stopScheduler();
       stopVixPolling();
       closeDatabase();
@@ -850,6 +896,7 @@ if (!singleInstance) {
   });
 
   app.on('before-quit', () => {
+    clearInterval(webSyncTimer);
     (app as any).isQuitting = true;
     globalShortcut.unregisterAll();
     stopScheduler();

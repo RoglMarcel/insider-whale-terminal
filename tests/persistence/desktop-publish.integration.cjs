@@ -10,7 +10,19 @@ const repo = path.join(root, 'checkout');
 const remote = path.join(root, 'remote.git');
 const source = path.join(root, 'source.db');
 const python = process.env.PYTHON || 'python3';
+// This integration can only use local fixture remotes: block every network
+// protocol and user/system URL rewrites, including in publisher subprocesses.
+process.env.GIT_ALLOW_PROTOCOL = 'file';
+process.env.GIT_CONFIG_NOSYSTEM = '1';
+process.env.GIT_CONFIG_GLOBAL = path.join(root, 'empty.gitconfig');
+fs.writeFileSync(process.env.GIT_CONFIG_GLOBAL, '');
 const run = (args, cwd = repo) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+const assertLocalRemote = () => {
+  assert.equal(path.resolve(run(['remote', 'get-url', '--push', 'origin']).trim()), remote);
+  assert.equal(path.dirname(remote), root);
+  assert.equal(fs.lstatSync(remote).isSymbolicLink(), false);
+  assert.equal(run(['rev-parse', '--is-bare-repository'], remote).trim(), 'true');
+};
 (async () => {
   fs.mkdirSync(repo);
   run(['init', '--bare', remote], root);
@@ -20,7 +32,7 @@ const run = (args, cwd = repo) => execFileSync('git', args, { cwd, encoding: 'ut
   fs.writeFileSync(path.join(repo, 'package.json'), '{}');
   fs.writeFileSync(path.join(repo, 'unrelated.txt'), 'original');
   run(['add', '.']); run(['commit', '-m', 'fixture']);
-  run(['remote', 'add', 'origin', remote]); run(['push', '-u', 'origin', 'main']);
+  run(['remote', 'add', 'origin', remote]); assertLocalRemote(); run(['push', '-u', 'origin', 'main']);
   // Diverged local history + dirty/staged source copies must not block delivery.
   fs.writeFileSync(path.join(repo, 'local-only.txt'), 'keep local');
   run(['add', '.']); run(['commit', '-m', 'local divergence']);
@@ -39,6 +51,7 @@ INSERT INTO private_payload VALUES(zeroblob(106000000));
 """)
 c.commit();c.close()`, source]);
   assert(fs.statSync(source).size > 100 * 1024 * 1024);
+  assertLocalRemote();
   const result = await publishToWeb({ repoPath: repo, sourceDbPathForTest: source, sinceIso: '2026-01-01' });
   assert.equal(result.ok, true, result.error);
   assert.equal(result.pushed, true);
@@ -63,5 +76,17 @@ c.close()`, decoder, path.join(delivered, 'data/desktop-publish'), path.join(roo
   const again = await publishToWeb({ repoPath: repo, sourceDbPathForTest: source, sinceIso: '2026-01-01' });
   assert.equal(again.ok, true, again.error);
   assert.equal(run(['rev-parse', 'main'], remote), before, 'unchanged data must not trigger another deployment');
+  // A second machine's delivery must retain the first pending package, even
+  // when that machine has none of the first machine's signal rows.
+  execFileSync(python, ['-c', `import sqlite3,sys
+c=sqlite3.connect(sys.argv[1]);c.execute('DELETE FROM signals');c.execute("INSERT INTO signals VALUES(2,'OTHER',85,'2026-09-23T10:00:00Z')");c.commit();c.close()`, source]);
+  assertLocalRemote();
+  const other = await publishToWeb({ repoPath: repo, sourceDbPathForTest: source });
+  assert.equal(other.ok, true, other.error);
+  run(['pull', '--ff-only'], delivered);
+  execFileSync(python, ['-c', `import importlib.util,sys,pathlib,sqlite3
+spec=importlib.util.spec_from_file_location('h',sys.argv[1]);h=importlib.util.module_from_spec(spec);spec.loader.exec_module(h)
+p=pathlib.Path(sys.argv[3]);h.unpack_desktop(pathlib.Path(sys.argv[2]),p)
+c=sqlite3.connect(p);assert c.execute('select ticker from signals order by ticker').fetchall()==[('OTHER',),('TEST',)];c.close()`, decoder, path.join(delivered, 'data/desktop-publish'), path.join(root, 'merged.db')]);
   console.log('Desktop delivery passed: >100 MB source, chunk-only Git commit, private data excluded, unrelated staged work preserved, Python restore verified.');
 })().catch(e => { console.error(e); process.exitCode = 1; }).finally(() => fs.rmSync(root, { recursive: true, force: true }));

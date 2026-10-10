@@ -26,11 +26,12 @@ to bypass a restore error: that would fall back to old history.
 
 Desktop-marked pushes still use the no-scrape path. Restoration merges the incoming
 `signals`, `scrape_log`, and `insider_trades` using the desktop publisher's natural
-keys; it preserves cloud portfolio, prices and outcomes. Duplicate rows are not
+keys; it preserves the cloud portfolio. Duplicate rows are not
 inserted. Updated desktop builds and `npm run publish:web` send a filtered SQLite export
 through `data/desktop-publish/`: gzip parts of at most 32 MiB plus a SHA-256
-manifest. The raw database is never staged. Only signals, scrape logs and insider
-trades are exported; desktop settings and other private tables are excluded.
+manifest. The raw database is never staged. Signals, scrape logs, insider trades,
+immutable backtest evidence, labeled outcomes, quote caches and retained portfolio
+candidates are exported; desktop settings and other private tables are excluded.
 The runner checks every part, the combined archive, and SQLite integrity before
 merging. Scheduled runs also ingest the latest package idempotently so a skipped
 push workflow cannot lose delivery. Desktop-marked commits skip cloud scraping
@@ -42,6 +43,44 @@ credentials and configured checkout are reused; no Python or GitHub CLI is neede
 on the desktop. The CLI keeps its working history in ignored `tmp/desktop-history`,
 seeded from the existing committed DB on first use. Older builds can still deliver
 raw databases until they reach Git's limit, but should be upgraded.
+
+## Bidirectional desktop/web synchronization
+
+Every site build publishes a sanitized, checksummed SQLite package under
+`public/data/shared-history`. The desktop receives it on startup, before a scrape,
+on portfolio refresh and every minute while open. The website also polls every
+minute; open portfolio and backtest views refresh with the data update event.
+The switch “Desktop und Web synchronisieren” controls both directions.
+
+Evidence is merged by the same natural keys in both directions. Prices accept
+only observations with newer timestamps. An invalid checksum or failed book
+import leaves the local database unchanged. Only approved public tables and
+portfolio keys travel: logins, watchlists, notification rules and personal app
+settings stay on the device. Browser-local backtest reanalyses remain local.
+
+The cloud computes the shared simulated portfolio. Desktop scrapes contribute
+evidence for that computation instead of running a second conflicting book.
+After deployment the desktop imports positions, cash, equity, experiments and
+the exact published display together. Before adopting a new revision it archives
+the previous local book and its rules in `portfolio_revisions`. Historical
+backtest evidence stays append-only; independent old portfolio instances remain
+distinguishable by their portfolio IDs. Shared portfolio rules are read-only;
+disable synchronization to run a separate local simulation with custom rules.
+
+Local delivery is attempted on startup and after every scrape. Failures leave a
+durable pending marker and are retried by the minute timer, including after a
+restart. Each upload first merges the previous pending delivery package, so a
+second desktop cannot discard runs the cloud has not yet consumed. Scheduled
+desktop processes await delivery before exiting. Repeated downloads of the same
+revision skip the bulk transfer; repeated uploads do not create a commit.
+
+This is eventual synchronization: uploads become visible after the Actions build
+and Pages deployment, then on the next poll. An offline desktop keeps its last
+shared book and locally captured evidence until it can deliver/receive again.
+Both the website workflow and desktop executable must include this change; an
+old installed executable has no receiver. Run `scripts/verify-shared-history.ts`
+with the Node/Electron runtime wrapper for the isolated SQLite and download
+regression checks (also part of CI).
 
 The shared `scrape-publish` concurrency group serializes restore/write cycles.
 `contents: write` and the built-in `github.token` suffice; no new secret or external

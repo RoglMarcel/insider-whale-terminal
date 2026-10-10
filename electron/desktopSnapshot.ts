@@ -2,11 +2,33 @@ import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { createHash } from 'node:crypto';
-import { createGzip } from 'node:zlib';
+import { createGzip, createGunzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 
 export const DESKTOP_SNAPSHOT_PATH = 'data/desktop-publish';
 export const SNAPSHOT_CHUNK_BYTES = 32 * 1024 * 1024;
+
+/** Recover the previous delivery before preparing a new one, preserving other machines' pending runs. */
+export async function unpackDesktopSnapshot(directory: string, target: string): Promise<void> {
+  const manifest = JSON.parse(fs.readFileSync(path.join(directory, 'manifest.json'), 'utf8'));
+  if (manifest.version !== 1 || manifest.format !== 'sqlite-gzip' || !Array.isArray(manifest.parts) || !manifest.parts.length) throw new Error('Invalid snapshot manifest');
+  const archive = `${target}.gz`;
+  const hash = createHash('sha256');
+  fs.writeFileSync(archive, Buffer.alloc(0));
+  try {
+    for (const [index, part] of manifest.parts.entries()) {
+      if (part.name !== `part-${String(index).padStart(6, '0')}.gzpart` || !Number.isInteger(part.bytes) || part.bytes <= 0 || part.bytes > SNAPSHOT_CHUNK_BYTES) throw new Error('Invalid snapshot part');
+      const file = path.join(directory, part.name);
+      if (fs.lstatSync(file).isSymbolicLink()) throw new Error('Invalid snapshot link');
+      const bytes = fs.readFileSync(file);
+      if (bytes.length !== part.bytes || createHash('sha256').update(bytes).digest('hex') !== part.sha256) throw new Error('Snapshot checksum mismatch');
+      hash.update(bytes);
+      fs.appendFileSync(archive, bytes);
+    }
+    if (hash.digest('hex') !== manifest.sha256) throw new Error('Snapshot checksum mismatch');
+    await pipeline(fs.createReadStream(archive), createGunzip(), fs.createWriteStream(target));
+  } finally { fs.rmSync(archive, { force: true }); }
+}
 
 /** Transport a closed SQLite export, never a live database or its credentials. */
 export async function packageDesktopSnapshot(source: string, directory: string, chunkBytes = SNAPSHOT_CHUNK_BYTES): Promise<void> {

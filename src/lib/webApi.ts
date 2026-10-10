@@ -183,7 +183,7 @@ export const webApi: InsiderTrackerAPI = {
     onSignalsUpdated: (cb: (signals: Signal[]) => void) => {
       const id = setInterval(async () => {
         cb(await loadSignals(true));
-      }, 5 * 60_000);
+      }, 60_000);
       return () => clearInterval(id);
     },
   },

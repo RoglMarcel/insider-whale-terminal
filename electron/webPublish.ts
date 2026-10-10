@@ -3,8 +3,9 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { execFileSync } from 'node:child_process';
-import { packageDesktopSnapshot, DESKTOP_SNAPSHOT_PATH } from './desktopSnapshot';
+import { packageDesktopSnapshot, unpackDesktopSnapshot, DESKTOP_SNAPSHOT_PATH } from './desktopSnapshot';
 import { SCHEMA, runMigrations, snapshotDatabase } from './database';
+import { HISTORY_TABLES, mergeSharedHistory } from './sharedHistory';
 
 /**
  * Export only public signal/trade tables into bounded, checksummed Git chunks.
@@ -30,11 +31,10 @@ const COPIED_TABLES: { table: string; identity: string[] }[] = [
   // The pipeline's trade memory, so a later cloud run inherits the window this
   // machine built rather than restarting from its own 14-day source horizon.
   { table: 'insider_trades', identity: ['ticker', 'insider_key', 'trade_date', 'value_cents'] },
+  ...HISTORY_TABLES.filter(({ table }) => ['signal_outcomes', 'price_history', 'portfolio_experiment_candidates'].includes(table)),
 ];
 
 const GIT_TIMEOUT_MS = 120_000;
-/** Publish signals at least this fresh. Matches the web's active-signal window. */
-const DEFAULT_SINCE_MS = 7 * 86_400_000;
 
 export interface WebPublishResult {
   ok: boolean;
@@ -116,7 +116,7 @@ function copyTable(
 ): number {
   const targetCols = columnsOf(target, 'main', table);
   const sourceCols = columnsOf(target, 'src', table);
-  if (!sourceCols.length && table.startsWith('backtest_')) return 0; // older desktop export
+  if (!sourceCols.length) return 0; // older desktop export
   if (!targetCols.length || !sourceCols.length) throw new Error(`Missing export table: ${table}`);
   const cols = targetCols.filter((c) => c !== 'id' && sourceCols.includes(c));
   if (!identity.every((c) => cols.includes(c))) throw new Error(`Missing identity columns: ${table}`);
@@ -139,7 +139,8 @@ function copyTable(
   const sql = `INSERT INTO main."${table}" (${list})
                SELECT ${cols.map((c) => `s."${c}"`).join(', ')}
                FROM src."${table}" s
-               WHERE 1=1 ${timeFilter} ${notExists}`;
+               WHERE 1=1 ${timeFilter} ${notExists}
+               GROUP BY ${identity.map(c => `s."${c}"`).join(', ')}`;
   const info = hasTime ? target.prepare(sql).run({ since: sinceIso }) : target.prepare(sql).run();
   return info.changes;
 }
@@ -147,7 +148,7 @@ function copyTable(
 export interface PublishOptions {
   /** Repo checkout from settings; falls back to cwd when running from source. */
   repoPath?: string;
-  /** Only copy signals at least this fresh. Defaults to the last 7 days. */
+  /** Optional cutoff; all available history is shared by default. */
   sinceIso?: string;
   /** When false, write the repo DB but leave pushing to the user. */
   push?: boolean;
@@ -203,7 +204,14 @@ export async function publishToWeb(opts: PublishOptions = {}): Promise<WebPublis
     target.exec(SCHEMA);
     runMigrations(target);
 
-    const since = opts.sinceIso ?? new Date(Date.now() - DEFAULT_SINCE_MS).toISOString();
+    const previousPackage = path.join(repo, DESKTOP_SNAPSHOT_PATH);
+    if (fs.existsSync(path.join(previousPackage, 'manifest.json'))) {
+      const previous = path.join(tmpDir, 'previous.db');
+      await unpackDesktopSnapshot(previousPackage, previous);
+      mergeSharedHistory(target, previous);
+    }
+
+    const since = opts.sinceIso ?? '1970-01-01T00:00:00.000Z';
     target.prepare('ATTACH DATABASE ? AS src').run(sourcePath);
     const copied: Record<string, number> = {};
     try {
@@ -211,6 +219,11 @@ export async function publishToWeb(opts: PublishOptions = {}): Promise<WebPublis
         for (const { table, identity } of COPIED_TABLES) {
           // A partial export must not be reported as successful.
           copied[table] = copyTable(target as Database.Database, table, identity, since);
+        }
+        if (columnsOf(target as Database.Database, 'src', 'price_history').includes('fetched_at')) {
+          copied.price_history += (target as Database.Database).prepare(`UPDATE price_history AS t SET adj_close=s.adj_close, fetched_at=s.fetched_at
+            FROM src.price_history AS s WHERE t.ticker=s.ticker AND t.date=s.date
+            AND julianday(s.fetched_at)>COALESCE(julianday(t.fetched_at),0) AND s.adj_close>0`).run().changes;
         }
       });
       tx();

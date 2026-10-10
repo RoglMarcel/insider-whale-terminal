@@ -139,6 +139,15 @@ const slides: SlideData[] = [
       { title: 'Analysen und Export', desc: 'Geschlossene Positionen erhalten versionierte Auswertungen mit belegten Beobachtungen, Grenzen und Optimierungshypothesen. Alle Daten lassen sich als JSON exportieren.' },
     ],
   },
+  {
+    version: '1.7.1',
+    title: 'Version 1.7.1 · Desktop und Web',
+    subtitle: 'Gemeinsamer Datenstand mit automatischem Abgleich',
+    bullets: [
+      { title: 'Abgleich in beide Richtungen', desc: 'Lokale Scrapes werden veröffentlicht. Der Desktop übernimmt Verlauf, Depot und Backtests automatisch von der Website.' },
+      { title: 'Daten bleiben erhalten', desc: 'Wiederholte Übertragungen erzeugen keine zusätzlichen Einträge. Frühere lokale Depotstände werden archiviert; fehlgeschlagene Übertragungen werden erneut versucht.' },
+    ],
+  },
 ];
 
 function parseVersionNum(v: string): number {
