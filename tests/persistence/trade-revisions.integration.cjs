@@ -45,6 +45,15 @@ try {
   assert.equal(api.getNetInsiderFlow('FLOW').form144,1);
   api.upsertInsiderFlow([{ticker:'FLOW',flowDate:'2099-02-30',source:'invalid',buyValue:0,sellValue:999999,form144Count:9}]);
   assert.equal(db.prepare("SELECT COUNT(*) n FROM insider_flow WHERE source='invalid'").get().n,0);
+  // Transactions can contain sales even when the separate sales feed is empty.
+  api.upsertInsiderTrades([t({ticker:'SALES',transactionId:'sale-1',transactionType:'S - Sale'}),
+    t({ticker:'SALES',transactionId:'sale-2',insiderName:'John Smith',transactionType:'S - Sale'})]);
+  assert.equal(api.getNetInsiderFlow('SALES').sells,200000);
+  assert.equal(api.getNetInsiderFlow('SALES').buys,0);
+  api.upsertInsiderFlow([{ticker:'SALES',flowDate:today,source:'openinsider-sales',buyValue:0,sellValue:200000,form144Count:0}]);
+  assert.equal(api.getNetInsiderFlow('SALES').sells,200000);
+  api.upsertInsiderFlow([{ticker:'SALES',flowDate:today,source:'openinsider-sales',buyValue:0,sellValue:300000,form144Count:0}]);
+  assert.equal(api.getNetInsiderFlow('SALES').sells,300000);
   const metadata={ticker:'AMEND',insiderName:'Jane Doe',role:'CEO',source:'edgar',issuerCik:'99',reportingOwners:[{cik:'1',name:'Jane Doe',role:'CEO'}],filingDate:'2026-09-02',revisionAt:'2026-09-02T12:00:00Z',filingAccession:'000000009926000001',transactionId:'filing:000000009926000001:row:0',filingRow:0,tradeDate:today,transactionType:'P - Purchase',shares:100,value:10000};
   api.upsertInsiderTrades([metadata,{...metadata,source:'openinsider',reportingOwners:undefined,filingRow:undefined,transactionId:undefined,sourceUrl:'https://www.sec.gov/Archives/edgar/data/99/000000009926000001/form.xml'},
     {...metadata,tradeDate:'',shares:0,value:0,amendment:true,originalSubmissionDate:'2026-09-02',filingDate:'2026-09-03',revisionAt:'2026-09-03T12:00:00Z',filingAccession:'000000009926000002',transactionId:'filing:000000009926000002:metadata',filingRow:undefined,integrityStatus:'unlinked-amendment'}]);

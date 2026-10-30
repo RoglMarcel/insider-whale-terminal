@@ -79,6 +79,11 @@ async function contextPage(width, mode = 'full') {
     const name = new URL(route.request().url()).pathname.split('/').pop();
     if (mode === 'error' && ['signals.json', 'meta.json', 'portfolio.json'].includes(name)) return route.fulfill({ status: 503, body: 'Service unavailable' });
     let data = fixtures[name];
+    if (mode === 'sales' && name === 'signals.json') {
+      const date = new Date(Date.now() - 23 * 86400000).toISOString().slice(0, 10);
+      data = [{ ...sampleSignals[0], ticker: 'SMCI', companyName: 'Super Micro Computer', insiderCount: 0, totalDollarVolume: 0, topInsiderRole: null, tradeDate: null, filingDate: null, insiderFlow: undefined,
+        rawTrades: ['Liu Liang Chiu-Chu Sara', 'Liang Charles'].map(insiderName => ({ ticker: 'SMCI', insiderName, role: 'CEO', transactionType: 'S - Sale', tradeDate: date, filingDate: date, shares: 100000, price: 45.02, value: 4502000, source: 'openinsider' })) }];
+    }
     if (mode === 'empty') data = name === 'signals.json' ? [] : name === 'meta.json' ? { ...fixtures[name], runs: [] } : data;
     if (mode === 'no-high' && name === 'signals.json') data = data.map(s => ({ ...s, convictionLevel: 'LOW' }));
     if (!data) return route.fulfill({ status: 404 });
@@ -93,6 +98,21 @@ async function contextPage(width, mode = 'full') {
 (async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   browser = await chromium.launch({ headless: true });
+  for (const width of [1440, 390]) {
+    const { page, context, jsErrors } = await contextPage(width, 'sales');
+    const card = page.locator('main [role="button"][aria-label="SMCI"]');
+    await card.waitFor();
+    const text = await card.innerText();
+    for (const expected of ['2 insiders', 'Average insider sale price', '$45.02', 'Sale volume', '$9.00M', 'NET −$9.00M']) assert(text.includes(expected), `Sale card missing ${expected}: ${text}`);
+    await card.click();
+    const modal = page.getByRole('dialog');
+    await modal.waitFor();
+    assert((await modal.innerText()).includes('$9.00M sold'));
+    assert((await modal.innerText()).includes('2 insiders'));
+    assert.equal(jsErrors.length, 0, jsErrors.join('\n'));
+    await page.screenshot({ path: path.join(out, `${width}-insider-sales.png`) });
+    await context.close();
+  }
   for (const width of [1440, 820, 390, 320]) {
     const { page, context, jsErrors } = await contextPage(width);
     await page.locator('main [role="button"][aria-label="NVDA"]').waitFor();

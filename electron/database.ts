@@ -1,8 +1,8 @@
+import { summarizeInsiderTrades, mergeInsiderSaleVolume } from '../src/lib/insider-summary';
 import { utcInstantMs } from '../src/lib/utcDate';
 import { BACKTEST_SCHEMA } from './backtestSchema';
 import { captureDecision, recordBacktestBook, recordBacktestClosures, analyzePendingBacktests } from './backtest';
 import type { DecisionContext } from '../src/types/backtest';
-import { sanitizeTradeAmounts } from './scraper/util';
 import { tickerIssue, resolvedTicker } from '../src/lib/ticker-quality';
 import Database from 'better-sqlite3';
 import { tradeFingerprint, selectTradeRevisions } from './tradeRevisions';
@@ -1812,9 +1812,9 @@ export function getNetInsiderFlow(ticker: string, days = 90): InsiderFlowSummary
     sells = Math.max(sells, total.sells);
     form144 = Math.max(form144, total.form144);
   }
-  buys = dedupTrades(getRecentInsiderTrades(days, ticker))
-    .filter(t => admissibleTrade(t) && classifyTransaction(t.transactionType).modifier > 0)
-    .reduce((sum,t) => sum + (sanitizeTradeAmounts(t.shares ?? 0, t.price, t.value ?? 0)?.value ?? 0), 0);
+  const recorded = summarizeInsiderTrades(dedupTrades(getRecentInsiderTrades(days, ticker)));
+  buys = recorded.buys;
+  sells = mergeInsiderSaleVolume(sells, recorded.sells);
   const unresolvedBuys = getUnresolvedInsiderTrades(ticker).filter(t => classifyTransaction(t.transactionType).modifier > 0).length;
   return { buys, sells, form144, unresolvedBuys, buyCoverage: 'dated-records' };
 }

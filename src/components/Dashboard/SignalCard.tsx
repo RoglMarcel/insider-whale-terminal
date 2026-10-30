@@ -1,6 +1,7 @@
+import { summarizeInsiderTrades, mergeInsiderSaleVolume } from '@/lib/insider-summary';
 import { localizeRole } from '@/lib/signal-language';
 import type { MouseEvent } from 'react';
-import { type Signal, daysBetween, classifyTransaction } from '@/types';
+import { type Signal, daysBetween } from '@/types';
 import { GlassCard } from '@/components/UI/GlassCard';
 import { ScoreGauge } from '@/components/UI/ScoreGauge';
 import { ConvictionBadge } from '@/components/UI/ConvictionBadge';
@@ -14,10 +15,6 @@ import { useWatchlist } from '@/hooks/useWatchlist';
 import { formatUSD, formatPrice, formatCompact, confidenceColor } from '@/lib/format';
 import { useI18n } from '@/hooks/useI18n';
 import { AlertFairValue } from '@/components/UI/AlertFairValue';
-
-/** Single-trade ceiling — keep in sync with electron/scraper/util MAX_SANE_TRADE_VALUE. */
-const MAX_SANE_TRADE_VALUE = 5_000_000_000;
-const MAX_SANE_SHARE_PRICE = 1_000_000;
 
 function DetailRow({ label, value, isMono = false }: { label: string; value: string; isMono?: boolean }) {
   return (
@@ -49,54 +46,21 @@ export function SignalCard({ signal }: { signal: Signal }) {
   const { t, language } = useI18n();
   const watched = isWatched(signal.ticker);
 
-  // Insider display fields — derive from raw trades so empty topInsiderRole /
-  // missing price on the aggregate still show when trade rows exist.
-  const buyTrades = (signal.rawTrades ?? []).filter((t) => {
-    if (classifyTransaction(t.transactionType).modifier <= 0) return false;
-    const v = t.value ?? 0;
-    const p = t.price ?? 0;
-    if (v > MAX_SANE_TRADE_VALUE) return false;
-    if (p > MAX_SANE_SHARE_PRICE) return false;
-    return (p > 0 && t.shares > 0) || (v > 0 && t.shares > 0) || v > 0;
-  });
-  let pricedWeight = 0;
-  let pricedSum = 0;
-  let volumeSum = 0;
-  for (const t of buyTrades) {
-    const v = t.value > 0 && t.value <= MAX_SANE_TRADE_VALUE ? t.value : 0;
-    const p =
-      t.price != null && t.price > 0 && t.price <= MAX_SANE_SHARE_PRICE
-        ? t.price
-        : t.shares > 0 && v > 0
-          ? v / t.shares
-          : undefined;
-    if (p != null && p > 0 && p <= MAX_SANE_SHARE_PRICE && t.shares > 0) {
-      pricedSum += p * t.shares;
-      pricedWeight += t.shares;
-    }
-    if (v > 0) volumeSum += v;
-  }
-  const avgPrice = pricedWeight > 0 ? pricedSum / pricedWeight : undefined;
-  const displayVolume =
-    volumeSum > 0
-      ? volumeSum
-      : signal.totalDollarVolume > 0 && signal.totalDollarVolume <= MAX_SANE_TRADE_VALUE * 50
-        ? signal.totalDollarVolume
-        : 0;
-  const displayRole =
-    (signal.topInsiderRole && signal.topInsiderRole.trim()) ||
-    [...buyTrades]
-      .sort((a, b) => (b.value || 0) - (a.value || 0))
-      .map((t) => (t.role ?? '').trim())
-      .find(Boolean) ||
-    '—';
+  const insider = summarizeInsiderTrades(signal.rawTrades ?? []);
+  const avgPrice = insider.saleOnly ? insider.salePrice : insider.buyPrice;
+  const displayVolume = insider.saleOnly ? insider.sells : insider.buys;
+  const displayRole = insider.role;
 
   const topOption = signal.optionsActivity?.[0];
   const ageDays = daysBetween(signal.tradeDate) ?? signal.breakdown.signalAgeDays;
   const confidence = signal.breakdown?.confidence;
 
   // ── Context pills (only render when the backend actually has the data) ──
-  const flow = signal.insiderFlow;
+  const recent = summarizeInsiderTrades(signal.rawTrades ?? [], Date.now(), 90);
+  const recordedFlow = signal.insiderFlow;
+  const flow = recordedFlow || recent.buys > 0 || recent.sells > 0
+    ? { buys: recordedFlow?.buys ?? recent.buys, sells: mergeInsiderSaleVolume(recordedFlow?.sells ?? 0, recent.sells), form144: recordedFlow?.form144 ?? 0 }
+    : undefined;
   const stats = signal.stats;
   const netFlow = flow ? flow.buys - flow.sells : undefined;
   const netFlowColor =
@@ -206,8 +170,8 @@ export function SignalCard({ signal }: { signal: Signal }) {
             {hasPolitician && <PoliticianCountBadge count={politicianCount} className="shrink-0" />}
           </div>
           <DetailRow label={t('card.role')} value={localizeRole(displayRole, language)} />
-          <DetailRow label={t('card.price')} value={avgPrice ? formatPrice(avgPrice) : '—'} isMono />
-          <DetailRow label={t('card.volume')} value={displayVolume > 0 ? formatUSD(displayVolume) : '—'} isMono />
+          <DetailRow label={t(insider.saleOnly ? 'card.salePrice' : 'card.price')} value={avgPrice ? formatPrice(avgPrice) : '—'} isMono />
+          <DetailRow label={t(insider.saleOnly ? 'card.saleVolume' : 'card.buyVolume')} value={displayVolume > 0 ? formatUSD(displayVolume) : '—'} isMono />
         </div>
       </div>
 
@@ -247,7 +211,7 @@ export function SignalCard({ signal }: { signal: Signal }) {
       <div className="mt-auto flex items-center justify-between gap-2 border-t pt-3" style={{ borderColor: 'var(--border-glass)' }}>
         <span className="inline-flex items-center gap-1.5 text-sm text-secondary">
           <UsersIcon size={15} />
-          {t(signal.insiderCount === 1 ? 'card.insiderOne' : 'card.insiderMany', { count: signal.insiderCount })}
+          {t(insider.count === 1 ? 'card.insiderOne' : 'card.insiderMany', { count: insider.count })}
         </span>
         {topOption ? (
           <span

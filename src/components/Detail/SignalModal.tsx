@@ -1,3 +1,4 @@
+import { summarizeInsiderTrades } from '@/lib/insider-summary';
 import { displayText } from '@/lib/display-text';
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useI18n } from '@/hooks/useI18n';
@@ -81,6 +82,7 @@ export function SignalModal() {
   const loadSignals = useStore((s) => s.loadSignals);
   const { isWatched, toggleWatch } = useWatchlist();
   const [signal, setSignal] = useState<Signal | null>(null);
+  const insider = summarizeInsiderTrades(signal?.rawTrades ?? []);
   const alertValuation = useAlertFairValue(selectedTicker || '', signal?.breakdown.fairValue, true);
   const [loadingSignal, setLoadingSignal] = useState(true);
   const { t, language } = useI18n();
@@ -337,9 +339,10 @@ export function SignalModal() {
               <p className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[13px] text-secondary sm:text-xs">
                 <span className="inline-flex items-center gap-1">
                   <UsersIcon size={13} />{' '}
-                  {t(signal.insiderCount === 1 ? 'card.insiderOne' : 'card.insiderMany', { count: signal.insiderCount })}
+                  {t(insider.count === 1 ? 'card.insiderOne' : 'card.insiderMany', { count: insider.count })}
                 </span>
-                <span>{t('modal.bought', { amount: formatUSD(signal.totalDollarVolume) })}</span>
+                <span>{t('modal.bought', { amount: formatUSD(insider.buys) })}</span>
+                {insider.sells > 0 && <span>{t('modal.sold', { amount: formatUSD(insider.sells) })}</span>}
                 {best && (
                   <span style={{ color: accuracyColor(best.accuracy3m) }}>
                     {t('modal.topInsider', {
@@ -441,10 +444,10 @@ export function SignalModal() {
 
               {/* Features 1 + 5 — dates & earnings */}
               <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
-                <InfoCell label={t('modal.tradeDate')}>{formatDate(signal.tradeDate, language)}</InfoCell>
+                <InfoCell label={t('modal.tradeDate')}>{formatDate(insider.tradeDate, language)}</InfoCell>
                 <InfoCell label={t('modal.filingDate')}>
                   <span className="inline-flex items-center gap-1">
-                    {formatDate(signal.filingDate, language)}
+                    {formatDate(insider.filingDate, language)}
                     {signal.lateFiling && (
                       <span className="neutral-badge">{t('modal.lateFiling')}</span>
                     )}
